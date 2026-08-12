@@ -5,7 +5,7 @@ import json
 import re
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
-from intervals_utils import WORKOUTS_DIR
+from scripts.intervals_utils import WORKOUTS_DIR
 
 class ZWOConverter:
     def __init__(self):

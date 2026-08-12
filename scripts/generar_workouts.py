@@ -6,7 +6,7 @@ from google import genai
 from google.genai import types
 
 # Importamos las herramientas de Azure unificadas
-from intervals_utils import AzureBlobManager, BLOB_CSV_PATH, BLOB_MANIFEST_PATH, BLOB_PROMPT_PATH, BLOB_WORKOUTS_PREFIX
+from scripts.intervals_utils import AzureBlobManager, BLOB_CSV_PATH, BLOB_MANIFEST_PATH, BLOB_PROMPT_PATH, BLOB_WORKOUTS_PREFIX
 
 class IntervalsWorkoutGenerator:
     def __init__(self):

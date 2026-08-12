@@ -1,7 +1,7 @@
 import json
 import requests
 import datetime
-from intervals_utils import IntervalsClient, AzureBlobManager, BLOB_WORKOUTS_PREFIX
+from scripts.intervals_utils import IntervalsClient, AzureBlobManager, BLOB_WORKOUTS_PREFIX
 
 class IntervalsUploader:
     def __init__(self):

@@ -3,7 +3,7 @@ import sys
 import datetime
 import subprocess
 import logging
-from intervals_utils import IntervalsClient, SCRIPTS_DIR
+from scripts.intervals_utils import IntervalsClient, SCRIPTS_DIR
 
 # Configuración de logs
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')

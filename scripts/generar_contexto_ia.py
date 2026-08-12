@@ -1,7 +1,7 @@
 import io
 import csv
 import requests
-from intervals_utils import IntervalsClient, AzureBlobManager, BLOB_CSV_PATH
+from scripts.intervals_utils import IntervalsClient, AzureBlobManager, BLOB_CSV_PATH
 
 class IntervalsContextGenerator:
     def __init__(self):
