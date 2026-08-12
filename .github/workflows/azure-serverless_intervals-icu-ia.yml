@@ -81,5 +81,5 @@ jobs:
         with:
           app-name: 'intervals-icu-ia'
           slot-name: 'Production'
-          package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+          package: '.'
           
