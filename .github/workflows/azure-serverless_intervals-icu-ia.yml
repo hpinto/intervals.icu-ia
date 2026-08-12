@@ -77,6 +77,11 @@ jobs:
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_37D25088C4784940A54D41992F381D94 }}
 
       - name: 'Deploy to Azure Functions'
+    - name: Instalar dependencias localmente para Azure
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt --target=".python_packages/lib/site-packages"
+
         uses: Azure/functions-action@v1
         id: deploy-to-function
         with:
