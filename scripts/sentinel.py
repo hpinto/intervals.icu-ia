@@ -1,14 +1,14 @@
-import os
-import csv
 import json
-import subprocess
-import sys
+import csv
+import os
+import io
 import logging
 import datetime
 from google import genai
 from google.genai import types
 
-from intervals_utils import WORKOUTS_DIR, CSV_PATH, UPLOADER_SCRIPT
+from intervals_utils import AzureBlobManager, BLOB_CSV_PATH, BLOB_WORKOUTS_PREFIX
+from push_workouts import IntervalsUploader
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
@@ -18,29 +18,27 @@ class IntervalsSentinel:
         if not self.api_key:
             raise ValueError("Falta la credencial GEMINI_API_KEY en el entorno.")
         self.client = genai.Client(api_key=self.api_key)
+        self.blob_manager = AzureBlobManager()
 
     def evaluar_fatiga(self):
-        if not os.path.exists(CSV_PATH):
-            logging.warning(f"[Sentinel] Archivo de contexto no encontrado en {CSV_PATH}.")
+        contenido_csv = self.blob_manager.leer_texto(BLOB_CSV_PATH)
+        if not contenido_csv:
+            logging.warning(f"[Sentinel] CSV de contexto no encontrado en Azure ({BLOB_CSV_PATH}).")
             return 0, "No hay contexto."
 
-        filas = []
-        with open(CSV_PATH, "r", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                filas.append(row)
+        f = io.StringIO(contenido_csv)
+        reader = csv.DictReader(f)
+        filas = list(reader)
 
         if not filas:
             return 0, "CSV vacío."
 
         ultima_fila = filas[-1]
         try:
-            # Captura la columna plana 'HRV' generada por el contexto
             hrv_anoche = float(ultima_fila.get("HRV", 0))
         except ValueError:
             hrv_anoche = 0
 
-        # Calcular el promedio de los 7 días inmediatamente anteriores a "anoche"
         hrv_historico = []
         for row in filas[-8:-1]:
             val = row.get("HRV", "")
@@ -76,10 +74,12 @@ class IntervalsSentinel:
             return base + "- NIVEL 3: APLANAMIENTO TOTAL. Destruye la estructura actual de intervalos del 'workout_doc'. Reemplázala OBLIGATORIAMENTE por una sesión continua de recuperación de máximo 45 minutos en Z1 o Z2 baja."
         return ""
 
-    def mutar_entrenamiento(self, archivo_json, nivel, motivo):
-        logging.info(f"[Sentinel] Inyectando mutación Nivel {nivel} sobre {os.path.basename(archivo_json)}...")
-        with open(archivo_json, "r", encoding="utf-8") as f:
-            workout_data = json.load(f)
+    def mutar_entrenamiento(self, json_original_str, nivel, motivo):
+        logging.info(f"[Sentinel] Inyectando mutación Nivel {nivel}...")
+        try:
+            workout_data = json.loads(json_original_str)
+        except json.JSONDecodeError:
+            return None
 
         instruccion_matematica = self.obtener_instruccion_nivel(nivel, motivo)
         prompt = f"""
@@ -117,34 +117,43 @@ JSON ORIGINAL:
 
         if nivel == 0:
             logging.info("[Sentinel] No se requiere mitigación algorítmica hoy. Saliendo.")
-            sys.exit(0)
+            return
 
-        archivos_hoy = [os.path.join(WORKOUTS_DIR, f) for f in os.listdir(WORKOUTS_DIR) if f.startswith(hoy) and f.endswith(".json")]
-        if not archivos_hoy:
-            logging.info(f"[Sentinel] No se encontraron archivos JSON para hoy ({hoy}). Nada que ajustar.")
-            sys.exit(0)
+        blobs = self.blob_manager.listar_archivos(BLOB_WORKOUTS_PREFIX)
+        blobs_hoy = [b for b in blobs if hoy in b]
+
+        if not blobs_hoy:
+            logging.info(f"[Sentinel] No se encontraron archivos JSON para hoy ({hoy}) en Azure. Nada que ajustar.")
+            return
 
         mutaciones_exitosas = 0
-        for archivo_hoy in archivos_hoy:
+        for blob_name in blobs_hoy:
+            contenido = self.blob_manager.leer_texto(blob_name)
+            if not contenido:
+                continue
+
             try:
-                with open(archivo_hoy, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    if "[AJUSTADO TIER" in data.get("name", "").upper():
-                        logging.info(f"[Sentinel] {os.path.basename(archivo_hoy)} ya fue ajustado algorítmicamente. Omitiendo.")
-                        continue
+                data = json.loads(contenido)
+                if "[AJUSTADO TIER" in data.get("name", "").upper():
+                    logging.info(f"[Sentinel] {blob_name} ya fue ajustado algorítmicamente. Omitiendo.")
+                    continue
             except json.JSONDecodeError:
                 continue
 
-            json_mutado = self.mutar_entrenamiento(archivo_hoy, nivel, motivo)
+            json_mutado = self.mutar_entrenamiento(contenido, nivel, motivo)
             if json_mutado:
-                with open(archivo_hoy, "w", encoding="utf-8") as f:
-                    json.dump(json_mutado, f, indent=4, ensure_ascii=False)
-                logging.info(f"[Éxito] JSON reescrito matemáticamente con mitigación Nivel {nivel}.")
-                mutaciones_exitosas += 1
+                nuevo_contenido = json.dumps(json_mutado, indent=4, ensure_ascii=False)
+                if self.blob_manager.guardar_texto(blob_name, nuevo_contenido):
+                    logging.info(f"[Éxito] JSON reescrito matemáticamente en Azure con mitigación Nivel {nivel}.")
+                    mutaciones_exitosas += 1
 
-        if mutaciones_exitosas > 0 and os.path.exists(UPLOADER_SCRIPT):
-            logging.info("[Sentinel] Disparando el Uploader para inyectar los cambios en la nube...")
-            subprocess.run([sys.executable, UPLOADER_SCRIPT])
+        if mutaciones_exitosas > 0:
+            logging.info("[Sentinel] Disparando el Uploader para inyectar los cambios desde Azure a Intervals.icu...")
+            try:
+                uploader = IntervalsUploader()
+                uploader.sincronizar()
+            except Exception as e:
+                logging.error(f"[Error] Fallo al ejecutar el Uploader interno: {e}")
 
 if __name__ == "__main__":
     sentinel = IntervalsSentinel()

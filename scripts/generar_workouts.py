@@ -1,13 +1,12 @@
 import os
-import glob
 import json
 import datetime
 import time
 from google import genai
 from google.genai import types
 
-# Importar rutas centralizadas. Esto dispara automáticamente la carga del .env en intervals_utils
-from intervals_utils import WORKOUTS_DIR, CSV_PATH, MANIFEST_PATH, PROMPT_PATH
+# Importamos las herramientas de Azure unificadas
+from intervals_utils import AzureBlobManager, BLOB_CSV_PATH, BLOB_MANIFEST_PATH, BLOB_PROMPT_PATH, BLOB_WORKOUTS_PREFIX
 
 class IntervalsWorkoutGenerator:
     def __init__(self):
@@ -15,49 +14,45 @@ class IntervalsWorkoutGenerator:
         if not self.api_key:
             raise ValueError("Falta la credencial GEMINI_API_KEY en el entorno o en el archivo .env.")
         self.client = genai.Client(api_key=self.api_key)
+        self.blob_manager = AzureBlobManager()
 
-    def cargar_archivo(self, ruta):
-        if not os.path.exists(ruta):
-            print(f"[Advertencia] El archivo {ruta} no existe. Se omitirá su contenido.")
-            return ""
-        with open(ruta, "r", encoding="utf-8") as f:
-            return f.read()
-
-    def obtener_estado_calendario(self, output_dir):
-        archivos_json = glob.glob(os.path.join(output_dir, "*.json"))
+    def obtener_estado_calendario(self):
+        blobs = self.blob_manager.listar_archivos(BLOB_WORKOUTS_PREFIX)
         registro_bloqueos = set()
         texto_calendario = []
         
-        for archivo in archivos_json:
-            with open(archivo, "r", encoding="utf-8") as f:
-                try:
-                    data = json.load(f)
-                    fecha = data.get("start_date_local", "").split("T")[0]
-                    deporte = data.get("type", "Desconocido")
-                    registro_bloqueos.add((fecha, deporte))
-                    texto_calendario.append(f"- {fecha}: {deporte}")
-                except json.JSONDecodeError:
-                    continue
+        for blob_name in blobs:
+            contenido = self.blob_manager.leer_texto(blob_name)
+            if not contenido:
+                continue
+            try:
+                data = json.loads(contenido)
+                fecha = data.get("start_date_local", "").split("T")[0]
+                deporte = data.get("type", "Desconocido")
+                registro_bloqueos.add((fecha, deporte))
+                texto_calendario.append(f"- {fecha}: {deporte}")
+            except json.JSONDecodeError:
+                continue
         
         if not texto_calendario:
             return "Ninguno. El calendario de esta semana está vacío.", registro_bloqueos
         return "\n".join(sorted(texto_calendario)), registro_bloqueos
 
     def generar_entrenamientos(self):
-        print("[Generator] Cargando directrices, manifiesto y telemetría...")
-        system_prompt = self.cargar_archivo(PROMPT_PATH)
-        contexto_datos = self.cargar_archivo(CSV_PATH)
-        manifiesto_datos = self.cargar_archivo(MANIFEST_PATH)
+        print("[Generator] Cargando directrices, manifiesto y telemetría desde Azure Blob Storage...")
+        system_prompt = self.blob_manager.leer_texto(BLOB_PROMPT_PATH)
+        contexto_datos = self.blob_manager.leer_texto(BLOB_CSV_PATH)
+        manifiesto_datos = self.blob_manager.leer_texto(BLOB_MANIFEST_PATH)
 
         if not system_prompt:
-            print("[Error Crítico] Sin system prompt no se puede inicializar el modelo.")
+            print("[Error Crítico] Sin system prompt en Azure no se puede inicializar el modelo.")
             return
 
         hoy = datetime.date.today()
         dias_para_domingo = 6 - hoy.weekday()
         domingo = hoy + datetime.timedelta(days=dias_para_domingo)
         
-        texto_actual, registro_bloqueos = self.obtener_estado_calendario(WORKOUTS_DIR)
+        texto_actual, registro_bloqueos = self.obtener_estado_calendario()
         
         prompt_usuario = f"""
 Fecha de inicio del cálculo: {hoy.isoformat()}.
@@ -93,8 +88,6 @@ INSTRUCCIÓN OPERATIVA:
             
             texto_limpio = response.text.strip()
             entrenamientos = json.loads(texto_limpio)
-            
-            os.makedirs(WORKOUTS_DIR, exist_ok=True)
             timestamp = int(time.time())
             
             if not entrenamientos:
@@ -110,12 +103,15 @@ INSTRUCCIÓN OPERATIVA:
                     print(f"[Cortafuegos] Interceptado: Se bloqueó la creación de un nuevo '{deporte}' para el día {fecha} porque ya existe uno.")
                     continue
                 
-                filepath = os.path.join(WORKOUTS_DIR, f"{fecha}_{deporte}_{timestamp}_{idx}.json")
-                with open(filepath, "w", encoding="utf-8") as f:
-                    json.dump(ent, f, indent=4, ensure_ascii=False)
+                blob_name = f"{BLOB_WORKOUTS_PREFIX}{fecha}_{deporte}_{timestamp}_{idx}.json"
+                contenido_json = json.dumps(ent, indent=4, ensure_ascii=False)
                 
-                print(f"[Éxito] Nuevo JSON nativo generado: {filepath}")
-                eventos_guardados += 1
+                exito = self.blob_manager.guardar_texto(blob_name, contenido_json)
+                if exito:
+                    print(f"[Éxito] Nuevo JSON nativo generado e inyectado en Azure: {blob_name}")
+                    eventos_guardados += 1
+                else:
+                    print(f"[Error] Falló la escritura de {blob_name} en la nube.")
             
             if eventos_guardados == 0:
                 print("[Info] Todos los eventos propuestos por la IA fueron aniquilados por el cortafuegos.")

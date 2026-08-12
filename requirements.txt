@@ -1,0 +1,5 @@
+azure-functions
+azure-storage-blob
+google-genai
+requests
+python-dotenv
