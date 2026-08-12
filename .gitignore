@@ -1,0 +1,9 @@
+# Credenciales y Entorno (CRÍTICO)
+.env
+__pycache__/
+
+# Telemetría y Entrenamientos Locales
+data/contexto_ia.csv
+data/workouts_ia/
+*.lock
+*.log
