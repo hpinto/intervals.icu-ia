@@ -27,6 +27,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt --target=".python_packages/lib/site-packages"
 
+      - name: Zip artifact for deployment
+        run: zip -qq -r deploy.zip . -x "*.git*" -x "venv/*"
+
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -34,9 +37,9 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_3D1F4ACE3C6B4285A7769EB07F703A8C }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_37D25088C4784940A54D41992F381D94 }}
 
-      - name: Deploy to Azure Functions
-        uses: Azure/functions-action@v1
-        with:
-          app-name: 'intervals-icu-ia'
-          slot-name: 'Production'
-          package: '.'
+      - name: Deploy via Azure CLI
+        run: |
+          az functionapp deployment source config-zip \
+            --resource-group rg-ai-trainer-prd-eastus2 \
+            --name intervals-icu-ia \
+            --src deploy.zip
