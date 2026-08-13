@@ -8,7 +8,7 @@ from google import genai
 from google.genai import types
 
 from scripts.intervals_utils import AzureBlobManager, BLOB_CSV_PATH, BLOB_WORKOUTS_PREFIX
-from push_workouts import IntervalsUploader
+from scripts.push_workouts import IntervalsUploader
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
