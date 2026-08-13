@@ -1,11 +1,8 @@
-import os
-import sys
-import glob
 import json
 import re
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
-from scripts.intervals_utils import WORKOUTS_DIR
+from scripts.intervals_utils import AzureBlobManager, BLOB_WORKOUTS_PREFIX
 
 class ZWOConverter:
     def __init__(self):
@@ -15,6 +12,7 @@ class ZWOConverter:
             'Z5': 1.15, 'Z6': 1.30, 'Z7': 1.50
         }
         self.autor = "Héctor Alejandro Pinto Fernández"
+        self.blob_manager = AzureBlobManager()
 
     def _prettify(self, elem):
         rough_string = ET.tostring(elem, 'utf-8')
@@ -39,16 +37,14 @@ class ZWOConverter:
             if zona in intensity_str: return ratio
         return 0.50
 
-    def procesar_json_a_zwo(self, json_path):
+    def procesar_json_a_zwo(self, blob_name, contenido_json):
         try:
-            with open(json_path, 'r', encoding='utf-8') as f:
-                payload = json.load(f)
+            payload = json.loads(contenido_json)
         except json.JSONDecodeError:
-            print(f"[Error Crítico] El archivo {json_path} no es un JSON válido.")
+            print(f"[Error Crítico] El blob {blob_name} no es un JSON válido.")
             return False
 
         if payload.get("type") != "Ride":
-            print(f"[Suposición] El archivo {os.path.basename(json_path)} no es de ciclismo. Conversión ZWO omitida.")
             return False
 
         workout_file = ET.Element("workout_file")
@@ -60,6 +56,11 @@ class ZWOConverter:
         
         workout_element = ET.SubElement(workout_file, "workout")
         doc = payload.get("workout_doc", "")
+        
+        # Si el uploader ya sanitizó y fusionó el doc en description, lo recuperamos
+        if not doc and "description" in payload:
+            doc = payload["description"]
+            
         lineas = doc.split('\n')
         
         bloque_actual = ""
@@ -123,36 +124,39 @@ class ZWOConverter:
         
         inyectar_nodos_xml()
 
-        zwo_path = json_path.replace('.json', '.zwo')
-        with open(zwo_path, 'w', encoding='utf-8') as f:
-            f.write(self._prettify(workout_file))
-        print(f"[Éxito] Archivo ZWO compilado matemáticamente: {zwo_path}")
-        return True
+        zwo_blob_name = blob_name.replace('.json', '.zwo')
+        zwo_content = self._prettify(workout_file)
+        
+        if self.blob_manager.guardar_texto(zwo_blob_name, zwo_content):
+            print(f"[Éxito] Archivo ZWO compilado e inyectado en Azure: {zwo_blob_name}")
+            return True
+        return False
 
     def convertir_directorio(self):
-        archivos_json = glob.glob(os.path.join(WORKOUTS_DIR, "*.json"))
-        if not archivos_json:
-            print("[Info] No hay archivos JSON para convertir a ZWO.")
+        blobs = self.blob_manager.listar_archivos(BLOB_WORKOUTS_PREFIX)
+        blobs_json = [b for b in blobs if b.endswith('.json')]
+        blobs_zwo = [b for b in blobs if b.endswith('.zwo')]
+        
+        if not blobs_json:
+            print("[Info] No hay archivos JSON para convertir a ZWO en la nube.")
             return
 
         conversiones = 0
-        for json_path in archivos_json:
-            zwo_path = json_path.replace('.json', '.zwo')
-            # Omitir si el ZWO ya existe y es más reciente que el JSON
-            if os.path.exists(zwo_path) and os.path.getmtime(zwo_path) >= os.path.getmtime(json_path):
+        for json_blob in blobs_json:
+            zwo_blob = json_blob.replace('.json', '.zwo')
+            
+            # Condición de idempotencia nativa en nube
+            if zwo_blob in blobs_zwo:
                 continue
             
-            if self.procesar_json_a_zwo(json_path):
-                conversiones += 1
+            contenido = self.blob_manager.leer_texto(json_blob)
+            if contenido:
+                if self.procesar_json_a_zwo(json_blob, contenido):
+                    conversiones += 1
 
         if conversiones == 0:
             print("[Info] No se detectaron nuevos entrenamientos de ciclismo pendientes de conversión.")
 
 if __name__ == "__main__":
     conversor = ZWOConverter()
-    if len(sys.argv) > 1:
-        # Modo manual: python3 workout_json2zwo.py /ruta/al/entreno.json
-        conversor.procesar_json_a_zwo(sys.argv[1])
-    else:
-        # Modo masivo (Orquestador): escanea todo WORKOUTS_DIR
-        conversor.convertir_directorio()
+    conversor.convertir_directorio()
