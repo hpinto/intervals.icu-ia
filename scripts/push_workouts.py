@@ -24,7 +24,7 @@ class IntervalsUploader:
 
     def sincronizar(self):
         blobs = self.blob_manager.listar_archivos(BLOB_WORKOUTS_PREFIX)
-        # Filtrado estricto para evitar procesar los XML del ZWO Converter
+        # Filtrado estricto para evitar procesar los archivos .zwo o basura
         blobs_json = [b for b in blobs if b.endswith(".json")]
         
         if not blobs_json:
@@ -63,8 +63,21 @@ class IntervalsUploader:
                 if (fecha, deporte) in eventos_nube:
                     logging.info(f"[Cortafuegos Nube] Omitiendo {blob_name}: Ya existe un '{deporte}' el {fecha} en el servidor.")
                     continue
-                    
-                # Inyección delegada a la clase cliente para parseo estándar de diccionario
+                
+                # --- CAPA DE SANITIZACIÓN ESTRICTA PARA INTERVALS.ICU ---
+                payload["category"] = "WORKOUT"
+                
+                if "T" not in payload.get("start_date_local", ""):
+                    payload["start_date_local"] = f"{fecha}T00:00:00"
+                
+                if "workout_doc" in payload:
+                    doc = payload.pop("workout_doc")
+                    if "description" in payload:
+                        payload["description"] = payload["description"] + "\n\n" + doc
+                    else:
+                        payload["description"] = doc
+                # --------------------------------------------------------
+                
                 self.client.upload_event(payload)
                 
                 logging.info(f"[Éxito] JSON inyectado en Intervals.icu: {deporte} para el {fecha}.")
