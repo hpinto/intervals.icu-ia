@@ -1,23 +1,16 @@
 import json
-import requests
+import logging
 import datetime
 from scripts.intervals_utils import IntervalsClient, AzureBlobManager, BLOB_WORKOUTS_PREFIX
 
 class IntervalsUploader:
     def __init__(self):
         self.client = IntervalsClient()
-        self.base_url = f"{self.client.base_url}/athlete/{self.client.athlete_id}"
-        self.auth = self.client._get_auth()
         self.blob_manager = AzureBlobManager()
 
     def obtener_eventos_nube(self, oldest, newest):
-        url = f"{self.base_url}/events"
-        params = {"oldest": oldest, "newest": newest}
         try:
-            response = requests.get(url, auth=self.auth, params=params, timeout=30)
-            response.raise_for_status()
-            eventos = response.json()
-            
+            eventos = self.client.get_events(oldest=oldest, newest=newest)
             registro_nube = set()
             for evt in eventos:
                 fecha = evt.get("start_date_local", "").split("T")[0]
@@ -25,14 +18,17 @@ class IntervalsUploader:
                 if fecha and tipo != "Unknown":
                     registro_nube.add((fecha, tipo))
             return registro_nube
-        except requests.exceptions.RequestException as e:
-            print(f"[Error Crítico] Falló la lectura del calendario en la nube: {e}")
+        except Exception as e:
+            logging.error(f"[Error Crítico] Falló la lectura del calendario en la nube: {e}")
             return None
 
     def sincronizar(self):
-        blobs_json = self.blob_manager.listar_archivos(BLOB_WORKOUTS_PREFIX)
+        blobs = self.blob_manager.listar_archivos(BLOB_WORKOUTS_PREFIX)
+        # Filtrado estricto para evitar procesar los XML del ZWO Converter
+        blobs_json = [b for b in blobs if b.endswith(".json")]
+        
         if not blobs_json:
-            print("[Info] No hay archivos JSON en el contenedor de Azure.")
+            logging.info("[Info] No hay archivos JSON en el contenedor de Azure.")
             return
 
         hoy = datetime.date.today()
@@ -40,11 +36,11 @@ class IntervalsUploader:
         dias_para_domingo = 6 - hoy.weekday()
         domingo_str = (hoy + datetime.timedelta(days=dias_para_domingo)).isoformat()
 
-        print(f"[Uploader] Consultando calendario de Intervals.icu desde {hoy_str} hasta {domingo_str}...")
+        logging.info(f"[Uploader] Consultando calendario de Intervals.icu desde {hoy_str} hasta {domingo_str}...")
         eventos_nube = self.obtener_eventos_nube(hoy_str, domingo_str)
 
         if eventos_nube is None:
-            print("[Uploader] Sincronización abortada por falta de visibilidad en la nube.")
+            logging.warning("[Uploader] Sincronización abortada por falta de visibilidad en la nube.")
             return
         
         subidos = 0
@@ -65,24 +61,24 @@ class IntervalsUploader:
                     continue
                 
                 if (fecha, deporte) in eventos_nube:
-                    print(f"[Cortafuegos Nube] Omitiendo {blob_name}: Ya existe un '{deporte}' el {fecha} en el servidor.")
+                    logging.info(f"[Cortafuegos Nube] Omitiendo {blob_name}: Ya existe un '{deporte}' el {fecha} en el servidor.")
                     continue
                     
-                url_post = f"{self.base_url}/events"
-                respuesta = requests.post(url_post, auth=self.auth, json=[payload], timeout=30)
-                respuesta.raise_for_status()
+                # Inyección delegada a la clase cliente para parseo estándar de diccionario
+                self.client.upload_event(payload)
                 
-                print(f"[Éxito] JSON inyectado en Intervals.icu: {deporte} para el {fecha}.")
+                logging.info(f"[Éxito] JSON inyectado en Intervals.icu: {deporte} para el {fecha}.")
                 eventos_nube.add((fecha, deporte))
                 subidos += 1
                 
             except json.JSONDecodeError:
-                print(f"[Error] El archivo {blob_name} está corrupto y no es un JSON válido.")
-            except requests.exceptions.RequestException as e:
-                print(f"[Error de Red] Fallo al subir {blob_name}: {e}")
+                logging.error(f"[Error] El archivo {blob_name} está corrupto y no es un JSON válido.")
+            except Exception as e:
+                logging.error(f"[Error de Red] Fallo al subir {blob_name}: {e}")
 
-        print(f"[Uploader] Proceso finalizado. Eventos nuevos subidos: {subidos}. Archivos históricos purgados: {purgados}.")
+        logging.info(f"[Uploader] Proceso finalizado. Eventos nuevos subidos: {subidos}. Archivos históricos purgados: {purgados}.")
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
     uploader = IntervalsUploader()
     uploader.sincronizar()
