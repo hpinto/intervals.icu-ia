@@ -7,20 +7,20 @@ from scripts.generar_contexto_ia import IntervalsContextGenerator
 from scripts.generar_workouts import IntervalsWorkoutGenerator
 from scripts.sentinel import IntervalsSentinel
 from scripts.push_workouts import IntervalsUploader
-from scripts.workout_json2zwo import ZWOConverter
 
 app = func.FunctionApp()
 
 # Ejecuta cada 30 minutos entre las 10:00 y las 15:00 UTC (06:00 AM a 11:00 AM hora de Chile)
 @app.timer_trigger(schedule="0 */30 10-15 * * *", arg_name="mytimer", run_on_startup=False, use_monitor=False)
 def timer_orquestador_inteligente(mytimer: func.TimerRequest) -> None:
-    hoy = datetime.date.today().isoformat()
+    hoy_dt = datetime.date.today()
+    hoy = hoy_dt.isoformat()
     lock_blob = f"workouts_ia/pipeline_{hoy}.lock"
     blob_manager = AzureBlobManager()
 
     logging.info(f"[Orquestador] Iniciando ciclo de verificación para {hoy}...")
 
-    # 1. Cortafuegos de Idempotencia en Blob Storage
+    # 1. Cortafuegos de Idempotencia
     if blob_manager.leer_texto(lock_blob):
         logging.info("[Orquestador] El pipeline ya se ejecutó exitosamente hoy. Abortando.")
         return
@@ -41,32 +41,33 @@ def timer_orquestador_inteligente(mytimer: func.TimerRequest) -> None:
     hrv = datos_hoy.get("hrv")
     sleep = datos_hoy.get("sleepScore")
 
-    # 3. Validación estricta de condiciones fisiológicas
+    # 3. Validación estricta
     if hrv is None or sleep is None:
-        logging.info("[Orquestador] Registro creado, pero HRV o SleepScore están vacíos. Esperando sincronización de Garmin...")
+        logging.info("[Orquestador] Registro creado, pero HRV o Sleep están vacíos. Esperando...")
         return
 
-    logging.info(f"[Orquestador] Biometría detectada (HRV: {hrv}, Sleep: {sleep}). Iniciando ignición del motor algorítmico...")
+    logging.info(f"[Orquestador] Biometría detectada (HRV: {hrv}, Sleep: {sleep}). Iniciando ignición...")
 
     # 4. Disparar Reacción en Cadena
     try:
-        logging.info("---> Ejecutando 1/5: Contexto IA")
+        logging.info("---> Ejecutando 1/4: Contexto IA")
         IntervalsContextGenerator().generar_csv()
         
-        logging.info("---> Ejecutando 2/5: Inferencia Gemini")
-        IntervalsWorkoutGenerator().generar_entrenamientos()
+        # Cortafuegos Estructural: Bloqueo de Inferencia Diaria
+        if hoy_dt.weekday() == 0:
+            logging.info("---> Ejecutando 2/4: Inferencia Gemini (Día Lunes - Generación Semanal Autorizada)")
+            IntervalsWorkoutGenerator().generar_entrenamientos()
+        else:
+            logging.info("---> Omitiendo 2/4: Inferencia Gemini (Bloqueada de Martes a Domingo para evitar alucinaciones algorítmicas)")
         
-        logging.info("---> Ejecutando 3/5: Mutación Sentinel")
+        logging.info("---> Ejecutando 3/4: Mutación Sentinel")
         IntervalsSentinel().ejecutar()
         
-        logging.info("---> Ejecutando 4/5: Push a Intervals.icu")
+        logging.info("---> Ejecutando 4/4: Push a Intervals.icu")
         IntervalsUploader().sincronizar()
         
-        logging.info("---> Ejecutando 5/5: Conversión a ZWO")
-        ZWOConverter().convertir_directorio()
-        
-        # 5. Sellar el sistema por el resto del día depositando el candado en Azure
-        blob_manager.guardar_texto(lock_blob, f"Pipeline completado exitosamente a las {datetime.datetime.now().isoformat()}")
+        # 5. Sellar el sistema
+        blob_manager.guardar_texto(lock_blob, f"Pipeline completado a las {datetime.datetime.now().isoformat()}")
         logging.info("[Orquestador] Operación de día cero finalizada. Candado activado en la nube.")
 
     except Exception as e:
