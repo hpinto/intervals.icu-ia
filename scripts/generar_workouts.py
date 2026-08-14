@@ -11,7 +11,7 @@ class IntervalsWorkoutGenerator:
         self.macro_file = "config_ia/macrociclo.json"
         self.system_prompt_file = "config_ia/system_prompt.txt"
         self.manifest_file = "config_ia/manifiesto.md"
-        self.csv_file = "workouts_ia/contexto_ia.csv"
+        self.csv_file = "contexto_ia.csv"
         
         api_key = os.environ.get("GEMINI_API_KEY")
         if api_key:
