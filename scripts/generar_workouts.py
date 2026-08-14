@@ -108,7 +108,7 @@ class IntervalsWorkoutGenerator:
         logging.info("[WorkoutGenerator] Contactando a la API de Gemini...")
         
         try:
-            model = genai.GenerativeModel('gemini-1.5-pro')
+            model = genai.GenerativeModel('gemini-2.5-flash')
             response = model.generate_content(prompt_final, generation_config=self.generation_config)
             
             if not response.text:
