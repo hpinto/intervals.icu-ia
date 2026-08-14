@@ -1,0 +1,16 @@
+{
+    "modelo": "2x1",
+    "semana_actual": 1,
+    "calendario_carreras": [
+        {
+            "fecha": "2026-10-04",
+            "tipo": "Triatlón 5150",
+            "prioridad": "B"
+        },
+        {
+            "fecha": "2026-11-29",
+            "tipo": "Triatlón 70.3",
+            "prioridad": "A"
+        }
+    ]
+}
