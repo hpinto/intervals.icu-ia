@@ -2,7 +2,8 @@ import os
 import json
 import datetime
 import logging
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from scripts.intervals_utils import AzureBlobManager
 
 class IntervalsWorkoutGenerator:
@@ -14,13 +15,7 @@ class IntervalsWorkoutGenerator:
         self.csv_file = "contexto_ia.csv"
         
         api_key = os.environ.get("GEMINI_API_KEY")
-        if api_key:
-            genai.configure(api_key=api_key)
-        
-        # Configuracion estricta para forzar respuesta en JSON
-        self.generation_config = genai.GenerationConfig(
-            response_mime_type="application/json"
-        )
+        self.client = genai.Client(api_key=api_key) if api_key else genai.Client()
 
     def _determinar_fase(self, macro_data):
         hoy = datetime.date.today()
@@ -98,18 +93,21 @@ class IntervalsWorkoutGenerator:
         elif fase == "TAPER_B":
             directriz_fase = f"\n[FASE ESTRATÉGICA: MICRO-TAPER PARA {tipo_evento}]\nREGLA OBLIGATORIA: Mantén el volumen y estructura normal de lunes a miércoles. Solo a partir del jueves reduce drásticamente el volumen y carga de las sesiones previas al evento. Mantén activaciones de intensidad cortas orientadas biomecánicamente a {tipo_evento}.\n"
             
-        # Inyección del reloj del sistema
         hoy_str = datetime.date.today().isoformat()
         anclaje_temporal = f"\n[RELOJ DEL SISTEMA]\nCRÍTICO: Hoy es Lunes, {hoy_str}. Inicia la generación de fechas de la semana exactamente desde este día.\n"
         
-        # Acoplamiento del motor algorítmico, reglas estratégicas y estado biométrico actual
         prompt_final = f"{system_prompt}{anclaje_temporal}{directriz_fase}\n{manifiesto}\n\n[DATOS BIOMÉTRICOS Y DE RENDIMIENTO ACTUALES]\n{contexto_csv}"
         
         logging.info("[WorkoutGenerator] Contactando a la API de Gemini...")
         
         try:
-            model = genai.GenerativeModel('gemini-2.5-flash')
-            response = model.generate_content(prompt_final, generation_config=self.generation_config)
+            response = self.client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt_final,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                )
+            )
             
             if not response.text:
                 logging.error("[WorkoutGenerator] La API devolvió una respuesta vacía.")
