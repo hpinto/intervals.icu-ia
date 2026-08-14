@@ -98,8 +98,12 @@ class IntervalsWorkoutGenerator:
         elif fase == "TAPER_B":
             directriz_fase = f"\n[FASE ESTRATÉGICA: MICRO-TAPER PARA {tipo_evento}]\nREGLA OBLIGATORIA: Mantén el volumen y estructura normal de lunes a miércoles. Solo a partir del jueves reduce drásticamente el volumen y carga de las sesiones previas al evento. Mantén activaciones de intensidad cortas orientadas biomecánicamente a {tipo_evento}.\n"
             
+        # Inyección del reloj del sistema
+        hoy_str = datetime.date.today().isoformat()
+        anclaje_temporal = f"\n[RELOJ DEL SISTEMA]\nCRÍTICO: Hoy es Lunes, {hoy_str}. Inicia la generación de fechas de la semana exactamente desde este día.\n"
+        
         # Acoplamiento del motor algorítmico, reglas estratégicas y estado biométrico actual
-        prompt_final = f"{system_prompt}\n{directriz_fase}\n{manifiesto}\n\n[DATOS BIOMÉTRICOS Y DE RENDIMIENTO ACTUALES]\n{contexto_csv}"
+        prompt_final = f"{system_prompt}{anclaje_temporal}{directriz_fase}\n{manifiesto}\n\n[DATOS BIOMÉTRICOS Y DE RENDIMIENTO ACTUALES]\n{contexto_csv}"
         
         logging.info("[WorkoutGenerator] Contactando a la API de Gemini...")
         
