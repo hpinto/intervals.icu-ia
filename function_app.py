@@ -15,13 +15,15 @@ app = func.FunctionApp()
 def timer_orquestador_inteligente(mytimer: func.TimerRequest) -> None:
     hoy_dt = datetime.date.today()
     hoy = hoy_dt.isoformat()
-    lock_blob = f"workouts_ia/pipeline_{hoy}.lock"
+    # Candado estático único
+    lock_blob = "workouts_ia/pipeline_estado.lock"
     blob_manager = AzureBlobManager()
 
     logging.info(f"[Orquestador] Iniciando ciclo de verificación para {hoy}...")
 
-    # 1. Cortafuegos de Idempotencia
-    if blob_manager.leer_texto(lock_blob):
+    # 1. Cortafuegos de Idempotencia (evaluación por contenido)
+    contenido_lock = blob_manager.leer_texto(lock_blob)
+    if contenido_lock and hoy in contenido_lock:
         logging.info("[Orquestador] El pipeline ya se ejecutó exitosamente hoy. Abortando.")
         return
 
@@ -66,9 +68,9 @@ def timer_orquestador_inteligente(mytimer: func.TimerRequest) -> None:
         logging.info("---> Ejecutando 4/4: Push a Intervals.icu")
         IntervalsUploader().sincronizar()
         
-        # 5. Sellar el sistema
-        blob_manager.guardar_texto(lock_blob, f"Pipeline completado a las {datetime.datetime.now().isoformat()}")
-        logging.info("[Orquestador] Operación de día cero finalizada. Candado activado en la nube.")
+        # 5. Sellar el sistema sobrescribiendo el candado único
+        blob_manager.guardar_texto(lock_blob, hoy)
+        logging.info("[Orquestador] Operación de día cero finalizada. Candado estático actualizado en la nube.")
 
     except Exception as e:
         logging.error(f"[Error Crítico] Colapso en la cadena de ejecución: {e}")
