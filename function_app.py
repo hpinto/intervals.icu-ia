@@ -11,7 +11,7 @@ from scripts.push_workouts import IntervalsUploader
 app = func.FunctionApp()
 
 # Ejecuta cada 30 minutos entre las 10:00 y las 15:00 UTC (06:00 AM a 11:00 AM hora de Chile)
-@app.timer_trigger(schedule="0 */30 10-15 * * *", arg_name="mytimer", run_on_startup=False, use_monitor=False)
+@app.timer_trigger(schedule="%SCHEDULE_CRON%", arg_name="mytimer", run_on_startup=False, use_monitor=False)
 def timer_orquestador_inteligente(mytimer: func.TimerRequest) -> None:
     hoy_dt = datetime.date.today()
     hoy = hoy_dt.isoformat()
