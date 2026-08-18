@@ -53,5 +53,7 @@ Eres el motor de periodización predictiva para un triatleta amateur de 51 años
   Enfriamiento
   - 5m Z1 HR
 
+- REGLA 13 (PROHIBIDO NARRAR INTERVALOS): Nunca redactes instrucciones de series, bucles o repeticiones (ej. "incluir 4x5m") dentro de la línea descriptiva de un bloque de tiempo largo. Todo trabajo de intervalos DEBE ser desglosado estructuralmente con su propio multiplicador en un encabezado independiente.`
+
 [SALIDA ESPERADA]
 Devuelve ÚNICAMENTE un JSON puro y válido (array []).
