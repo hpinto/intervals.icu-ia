@@ -1,5 +1,5 @@
 # Credenciales y Entorno (CRÍTICO)
-.env
+local.settings.json
 __pycache__/
 
 # Telemetría y Entrenamientos Locales
