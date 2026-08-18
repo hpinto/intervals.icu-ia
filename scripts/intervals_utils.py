@@ -73,6 +73,19 @@ class AzureBlobManager:
             print(f"[Azure] Error al eliminar {blob_name}: {e}")
             return False
 
+    def mover_archivo(self, origen, destino):
+        """Emula un comando 'move' leyendo, guardando en nueva ruta y eliminando el original."""
+        try:
+            contenido = self.leer_texto(origen)
+            if contenido:
+                if self.guardar_texto(destino, contenido):
+                    self.eliminar_archivo(origen)
+                    return True
+            return False
+        except Exception as e:
+            print(f"[Azure] Error al mover {origen} a {destino}: {e}")
+            return False
+
 
 class IntervalsClient:
     def __init__(self):
@@ -114,5 +127,12 @@ class IntervalsClient:
     def upload_event(self, payload):
         url = f"{self.base_url}/athlete/{self.athlete_id}/events"
         response = requests.post(url, auth=self._get_auth(), json=payload, timeout=30)
+        response.raise_for_status()
+        return response.json()
+
+    def update_event(self, event_id, payload):
+        """Actualiza quirúrgicamente un evento existente en Intervals.icu (Método PUT)."""
+        url = f"{self.base_url}/athlete/{self.athlete_id}/events/{event_id}"
+        response = requests.put(url, auth=self._get_auth(), json=payload, timeout=30)
         response.raise_for_status()
         return response.json()

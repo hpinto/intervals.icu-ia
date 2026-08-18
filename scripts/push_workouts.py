@@ -1,14 +1,11 @@
 import json
 import logging
 import datetime
-import requests
 from scripts.intervals_utils import IntervalsClient, AzureBlobManager, BLOB_WORKOUTS_PREFIX
 
 class IntervalsUploader:
     def __init__(self):
         self.client = IntervalsClient()
-        self.base_url = f"{self.client.base_url}/athlete/{self.client.athlete_id}"
-        self.auth = self.client._get_auth()
         self.blob_manager = AzureBlobManager()
 
     def obtener_eventos_nube(self, oldest, newest):
@@ -33,7 +30,7 @@ class IntervalsUploader:
         blobs_json = [b for b in blobs if b.endswith(".json")]
         
         if not blobs_json:
-            logging.info("[Info] No hay archivos JSON en el contenedor de Azure.")
+            logging.info("[Info] No hay archivos JSON pendientes en la cola principal de Azure.")
             return
 
         hoy = datetime.date.today()
@@ -49,37 +46,38 @@ class IntervalsUploader:
             return
         
         subidos = 0
-        purgados = 0
+        archivados = 0
         
         for blob_name in blobs_json:
+            # Cortafuegos para ignorar iteraciones sobre archivos que ya están en el histórico
+            if "history/" in blob_name:
+                continue
+
             contenido = self.blob_manager.leer_texto(blob_name)
             if not contenido:
                 continue
+                
             try:
                 payload = json.loads(contenido)
                 fecha = payload.get("start_date_local", "").split("T")[0]
                 deporte = payload.get("type", "Unknown")
                 
+                archivo_nombre = blob_name.split('/')[-1]
+                destino_historico = f"workouts_ia/history/{fecha}/{archivo_nombre}"
+                
                 if fecha < hoy_str:
-                    self.blob_manager.eliminar_archivo(blob_name)
-                    purgados += 1
+                    logging.info(f"[Uploader] Archivando evento expirado: {blob_name}")
+                    self.blob_manager.mover_archivo(blob_name, destino_historico)
+                    archivados += 1
                     continue
                 
                 evento_existente = eventos_nube.get((fecha, deporte))
                 
                 if evento_existente:
-                    nombre_nube = evento_existente.get("name", "")
-                    nombre_local = payload.get("name", "")
-                    
-                    # Intercepción de mitigación: Si el JSON local fue ajustado por Sentinel pero la nube no
-                    if "[AJUSTADO TIER" in nombre_local and "[AJUSTADO TIER" not in nombre_nube:
-                        logging.info(f"[Cortafuegos Nube] Excepción autorizada: Aplicando mitigación Sentinel para {deporte} el {fecha}. Destruyendo evento original.")
-                        evt_id = evento_existente.get("id")
-                        if evt_id:
-                            requests.delete(f"{self.base_url}/events/{evt_id}", auth=self.auth, timeout=30)
-                    else:
-                        logging.info(f"[Cortafuegos Nube] Omitiendo {blob_name}: Ya existe un '{deporte}' el {fecha} en el servidor.")
-                        continue
+                    logging.info(f"[Cortafuegos Nube] Omitiendo {blob_name}: Ya existe un '{deporte}' el {fecha} en el servidor. Archivando JSON.")
+                    self.blob_manager.mover_archivo(blob_name, destino_historico)
+                    archivados += 1
+                    continue
                 
                 # Capa de sanitización estricta
                 payload["category"] = "WORKOUT"
@@ -95,17 +93,21 @@ class IntervalsUploader:
                         payload["description"] = doc
                 
                 self.client.upload_event(payload)
-                
                 logging.info(f"[Éxito] JSON inyectado en Intervals.icu: {deporte} para el {fecha}.")
+                
+                # Operación de archivo exitoso
+                self.blob_manager.mover_archivo(blob_name, destino_historico)
+                
                 eventos_nube[(fecha, deporte)] = {"id": None, "name": payload.get("name", "")}
                 subidos += 1
+                archivados += 1
                 
             except json.JSONDecodeError:
                 logging.error(f"[Error] El archivo {blob_name} está corrupto y no es un JSON válido.")
             except Exception as e:
                 logging.error(f"[Error de Red] Fallo al subir {blob_name}: {e}")
 
-        logging.info(f"[Uploader] Proceso finalizado. Eventos subidos/sobrescritos: {subidos}. Históricos purgados: {purgados}.")
+        logging.info(f"[Uploader] Proceso finalizado. Eventos subidos: {subidos}. Eventos archivados: {archivados}.")
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')

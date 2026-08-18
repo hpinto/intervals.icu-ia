@@ -7,8 +7,7 @@ import datetime
 from google import genai
 from google.genai import types
 
-from scripts.intervals_utils import AzureBlobManager, BLOB_CSV_PATH, BLOB_WORKOUTS_PREFIX
-from scripts.push_workouts import IntervalsUploader
+from scripts.intervals_utils import AzureBlobManager, IntervalsClient, BLOB_CSV_PATH
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
@@ -19,6 +18,7 @@ class IntervalsSentinel:
             raise ValueError("Falta la credencial GEMINI_API_KEY en el entorno.")
         self.client = genai.Client(api_key=self.api_key)
         self.blob_manager = AzureBlobManager()
+        self.intervals_client = IntervalsClient() # Instanciamos el cliente de la API
 
     def evaluar_fatiga(self):
         contenido_csv = self.blob_manager.leer_texto(BLOB_CSV_PATH)
@@ -71,26 +71,23 @@ class IntervalsSentinel:
         elif nivel == 2:
             return base + "- NIVEL 2: RECORTE DUAL. Reduce el número de repeticiones del set principal a la mitad. Además, REDUCE los objetivos de intensidad (Pace/Power) al límite inferior de la zona inmediatamente anterior."
         elif nivel == 3:
-            return base + "- NIVEL 3: APLANAMIENTO TOTAL. Destruye la estructura actual de intervalos del 'workout_doc'. Reemplázala OBLIGATORIAMENTE por una sesión continua de recuperación de máximo 45 minutos en Z1 o Z2 baja."
+            return base + "- NIVEL 3: APLANAMIENTO TOTAL. Destruye la estructura actual de intervalos en 'description'. Reemplázala OBLIGATORIAMENTE por una sesión continua de recuperación de máximo 45 minutos en Z1 o Z2 baja."
         return ""
 
-    def mutar_entrenamiento(self, json_original_str, nivel, motivo):
-        logging.info(f"[Sentinel] Inyectando mutación Nivel {nivel}...")
-        try:
-            workout_data = json.loads(json_original_str)
-        except json.JSONDecodeError:
-            return None
-
+    def mutar_entrenamiento(self, evento_nube, nivel, motivo):
+        nombre_original = evento_nube.get("name", "Entrenamiento")
+        logging.info(f"[Sentinel] Inyectando mutación Nivel {nivel} al evento '{nombre_original}'...")
+        
         instruccion_matematica = self.obtener_instruccion_nivel(nivel, motivo)
         prompt = f"""
-Eres un motor de periodización deportiva estricto. Se requiere ajustar este entrenamiento de Intervals.icu.
+Eres un motor de periodización deportiva estricto. Debes ajustar este entrenamiento extraído de la API de Intervals.icu respetando el DSL de la plataforma.
 {instruccion_matematica}
 - Agrega obligatoriamente la etiqueta [AJUSTADO TIER {nivel}] al inicio del campo "name".
+- MANTÉN INTACTOS los campos "id" y "start_date_local".
 - Devuelve ÚNICAMENTE el JSON validado como un diccionario plano ({{}}), sin arrays ni markdown envolvente.
-- Mantén la llave "category" ESTRICTAMENTE como "WORKOUT".
 
-JSON ORIGINAL:
-{json.dumps(workout_data, indent=2, ensure_ascii=False)}
+JSON ORIGINAL DESDE LA API:
+{json.dumps(evento_nube, indent=2, ensure_ascii=False)}
 """
         try:
             response = self.client.models.generate_content(
@@ -119,41 +116,38 @@ JSON ORIGINAL:
             logging.info("[Sentinel] No se requiere mitigación algorítmica hoy. Saliendo.")
             return
 
-        blobs = self.blob_manager.listar_archivos(BLOB_WORKOUTS_PREFIX)
-        blobs_hoy = [b for b in blobs if hoy in b]
+        logging.info(f"[Sentinel] Extrayendo realidad desde Intervals.icu para hoy ({hoy})...")
+        try:
+            eventos_hoy = self.intervals_client.get_events(oldest=hoy, newest=hoy)
+        except Exception as e:
+            logging.error(f"[Sentinel] Falla de red al consultar la API: {e}")
+            return
 
-        if not blobs_hoy:
-            logging.info(f"[Sentinel] No se encontraron archivos JSON para hoy ({hoy}) en Azure. Nada que ajustar.")
+        if not eventos_hoy:
+            logging.info(f"[Sentinel] El calendario de Intervals.icu está vacío para hoy. Nada que ajustar.")
             return
 
         mutaciones_exitosas = 0
-        for blob_name in blobs_hoy:
-            contenido = self.blob_manager.leer_texto(blob_name)
-            if not contenido:
+        for evento in eventos_hoy:
+            if evento.get("category") != "WORKOUT":
+                continue
+                
+            if "[AJUSTADO TIER" in evento.get("name", "").upper():
+                logging.info(f"[Sentinel] El evento '{evento.get('name')}' ya fue ajustado algorítmicamente. Omitiendo.")
                 continue
 
-            try:
-                data = json.loads(contenido)
-                if "[AJUSTADO TIER" in data.get("name", "").upper():
-                    logging.info(f"[Sentinel] {blob_name} ya fue ajustado algorítmicamente. Omitiendo.")
-                    continue
-            except json.JSONDecodeError:
-                continue
-
-            json_mutado = self.mutar_entrenamiento(contenido, nivel, motivo)
+            json_mutado = self.mutar_entrenamiento(evento, nivel, motivo)
             if json_mutado:
-                nuevo_contenido = json.dumps(json_mutado, indent=4, ensure_ascii=False)
-                if self.blob_manager.guardar_texto(blob_name, nuevo_contenido):
-                    logging.info(f"[Éxito] JSON reescrito matemáticamente en Azure con mitigación Nivel {nivel}.")
+                evt_id = evento.get("id")
+                try:
+                    self.intervals_client.update_event(evt_id, json_mutado)
+                    logging.info(f"[Éxito] Mutación inyectada directo a Intervals.icu para el evento ID {evt_id}.")
                     mutaciones_exitosas += 1
+                except Exception as e:
+                    logging.error(f"[Error Crítico] Falló la re-escritura PUT en la API: {e}")
 
         if mutaciones_exitosas > 0:
-            logging.info("[Sentinel] Disparando el Uploader para inyectar los cambios desde Azure a Intervals.icu...")
-            try:
-                uploader = IntervalsUploader()
-                uploader.sincronizar()
-            except Exception as e:
-                logging.error(f"[Error] Fallo al ejecutar el Uploader interno: {e}")
+            logging.info("[Sentinel] Ciclo de mitigación cerrado con éxito en la plataforma.")
 
 if __name__ == "__main__":
     sentinel = IntervalsSentinel()
