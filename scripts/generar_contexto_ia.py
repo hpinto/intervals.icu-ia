@@ -1,5 +1,6 @@
 import io
 import csv
+import datetime
 import requests
 from scripts.intervals_utils import IntervalsClient, AzureBlobManager, BLOB_CSV_PATH
 
@@ -40,16 +41,11 @@ class IntervalsContextGenerator:
 
         return umbrales
 
-    def generar_csv(self):
-        wellness_data = self.client.get_wellness()
-        umbrales = self.obtener_umbrales()
-        
+    def generar_csv_biometrico(self, wellness_data, umbrales):
         campos = [
             "Fecha", "CTL", "ATL", "TSB", "HRV", "HR_Rest", 
             "Sleep_Secs", "Sleep_Score", "FTP_Ride", "CSS_Swim", "Pace_Run"
         ]
-        
-        # Construcción del CSV en memoria RAM
         output = io.StringIO()
         writer = csv.DictWriter(output, fieldnames=campos)
         writer.writeheader()
@@ -70,20 +66,77 @@ class IntervalsContextGenerator:
                 "CSS_Swim": umbrales["CSS_Swim"],
                 "Pace_Run": umbrales["Pace_Run"]
             })
+        return output.getvalue().strip()
+
+    def generar_resumen_actividades_previas(self, dias=7):
+        hoy = datetime.date.today()
+        hace_n_dias = (hoy - datetime.timedelta(days=dias)).isoformat()
+        hoy_str = hoy.isoformat()
         
-        contenido_csv = output.getvalue()
-        
-        # Inyección directa a Azure Blob Storage
-        exito = self.blob_manager.guardar_texto(BLOB_CSV_PATH, contenido_csv)
-        
-        if exito:
-            print(f"[Contexto] CSV generado e inyectado exitosamente en Azure: {BLOB_CSV_PATH}")
-        else:
-            print("[Error] Falló la escritura del CSV en Azure Blob Storage.")
+        try:
+            actividades = self.client.get_activities(oldest=hace_n_dias, newest=hoy_str)
+        except Exception as e:
+            return f"Error API Actividades: {e}"
+
+        if not actividades:
+            return "No se registraron actividades en los últimos 7 días."
+
+        output = io.StringIO()
+        campos = ["Fecha", "Deporte", "Nombre", "Duracion_m", "TSS"]
+        writer = csv.DictWriter(output, fieldnames=campos)
+        writer.writeheader()
+
+        vistos = set()
+
+        for act in actividades:
+            fecha = act.get("start_date_local", "").split("T")[0]
+            tipo = act.get("type", "Otro")
+            nombre = act.get("name", "Entrenamiento sin nombre")
+            segundos = act.get("moving_time") or act.get("elapsed_time") or 0
+            minutos = round(segundos / 60)
+            carga = act.get("icu_training_load") or act.get("icu_joules_load") or 0
+            
+            firma = f"{fecha}_{tipo}_{minutos}_{carga}"
+
+            if firma not in vistos:
+                vistos.add(firma)
+                writer.writerow({
+                    "Fecha": fecha,
+                    "Deporte": tipo,
+                    "Nombre": nombre,
+                    "Duracion_m": minutos,
+                    "TSS": carga
+                })
+
+        return output.getvalue().strip()
+
+    def generar_csv(self):
+        try:
+            wellness_data = self.client.get_wellness()
+            umbrales = self.obtener_umbrales()
+            
+            csv_biometria = self.generar_csv_biometrico(wellness_data, umbrales)
+            tabla_actividades = self.generar_resumen_actividades_previas(dias=7)
+            
+            contexto_completo = (
+                "[BIOMETRÍA Y RECUPERACIÓN (ÚLTIMOS 14 DÍAS)]\n"
+                f"{csv_biometria}\n\n"
+                "[HISTORIAL DE ESTÍMULOS REALIZADOS (ÚLTIMOS 7 DÍAS)]\n"
+                "REGLA DE VARIABILIDAD: Queda PROHIBIDO replicar la misma distribución de intensidades y deportes del microciclo previo. Aplica ondulación de cargas.\n"
+                f"{tabla_actividades}\n"
+            )
+            
+            # Inyección directa a Azure Blob Storage
+            exito = self.blob_manager.guardar_texto(BLOB_CSV_PATH, contexto_completo)
+            
+            if exito:
+                print(f"[Contexto] Archivo enriquecido inyectado exitosamente en Azure: {BLOB_CSV_PATH}")
+            else:
+                print("[Error] Falló la escritura del contexto en Azure Blob Storage.")
+                
+        except Exception as e:
+            print(f"[Error Crítico] Falla general en la construcción del contexto: {e}")
 
 if __name__ == "__main__":
-    try:
-        generador = IntervalsContextGenerator()
-        generador.generar_csv()
-    except Exception as e:
-        print(f"Error Crítico al generar contexto: {e}")
+    generador = IntervalsContextGenerator()
+    generador.generar_csv()
