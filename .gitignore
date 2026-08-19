@@ -1,5 +1,6 @@
 # Credenciales y Entorno (CRÍTICO)
 local.settings.json
+listar_modelos.py
 __pycache__/
 
 # Telemetría y Entrenamientos Locales

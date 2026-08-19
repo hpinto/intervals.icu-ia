@@ -1,6 +1,15 @@
+import os
 import json
 import logging
 import datetime
+
+# FORZAR INYECCIÓN DE ENTORNO LOCAL ANTES DE IMPORTAR UTILIDADES
+if os.path.exists("local.settings.json"):
+    with open("local.settings.json", "r") as f:
+        settings = json.load(f)
+        for k, v in settings.get("Values", {}).items():
+            os.environ[k] = str(v)
+
 from scripts.intervals_utils import IntervalsClient, AzureBlobManager, BLOB_WORKOUTS_PREFIX
 
 class IntervalsUploader:
@@ -49,7 +58,6 @@ class IntervalsUploader:
         archivados = 0
         
         for blob_name in blobs_json:
-            # Cortafuegos para ignorar iteraciones sobre archivos que ya están en el histórico
             if "history/" in blob_name:
                 continue
 
@@ -79,7 +87,6 @@ class IntervalsUploader:
                     archivados += 1
                     continue
                 
-                # Capa de sanitización estricta
                 payload["category"] = "WORKOUT"
                 
                 if "T" not in payload.get("start_date_local", ""):
@@ -95,7 +102,6 @@ class IntervalsUploader:
                 self.client.upload_event(payload)
                 logging.info(f"[Éxito] JSON inyectado en Intervals.icu: {deporte} para el {fecha}.")
                 
-                # Operación de archivo exitoso
                 self.blob_manager.mover_archivo(blob_name, destino_historico)
                 
                 eventos_nube[(fecha, deporte)] = {"id": None, "name": payload.get("name", "")}
@@ -110,6 +116,6 @@ class IntervalsUploader:
         logging.info(f"[Uploader] Proceso finalizado. Eventos subidos: {subidos}. Eventos archivados: {archivados}.")
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+    logging.basicConfig(level=logging.INFO, format='%(message)s')
     uploader = IntervalsUploader()
     uploader.sincronizar()

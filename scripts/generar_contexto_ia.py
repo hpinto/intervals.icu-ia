@@ -1,7 +1,18 @@
+import os
 import io
 import csv
+import json
 import datetime
 import requests
+
+# 1. FORZAR INYECCIÓN DE ENTORNO LOCAL ANTES DE IMPORTAR UTILIDADES
+if os.path.exists("local.settings.json"):
+    with open("local.settings.json", "r") as f:
+        settings = json.load(f)
+        for k, v in settings.get("Values", {}).items():
+            os.environ[k] = str(v)
+
+# 2. IMPORTACIÓN DE NEGOCIO (ya leerán las credenciales en memoria)
 from scripts.intervals_utils import IntervalsClient, AzureBlobManager, BLOB_CSV_PATH
 
 class IntervalsContextGenerator:
@@ -126,7 +137,6 @@ class IntervalsContextGenerator:
                 f"{tabla_actividades}\n"
             )
             
-            # Inyección directa a Azure Blob Storage
             exito = self.blob_manager.guardar_texto(BLOB_CSV_PATH, contexto_completo)
             
             if exito:
