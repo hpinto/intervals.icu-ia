@@ -132,7 +132,7 @@ class IntervalsWorkoutGenerator:
         
         try:
             response = self.client.models.generate_content(
-                model='gemini-pro-latest',
+                model='gemini-3.1-pro-preview',
                 contents=prompt_final,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json"
