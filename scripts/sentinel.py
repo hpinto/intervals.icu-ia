@@ -18,7 +18,7 @@ class IntervalsSentinel:
             raise ValueError("Falta la credencial GEMINI_API_KEY en el entorno.")
         self.client = genai.Client(api_key=self.api_key)
         self.blob_manager = AzureBlobManager()
-        self.intervals_client = IntervalsClient() # Instanciamos el cliente de la API
+        self.intervals_client = IntervalsClient() 
 
     def evaluar_fatiga(self):
         contenido_csv = self.blob_manager.leer_texto(BLOB_CSV_PATH)
@@ -26,7 +26,24 @@ class IntervalsSentinel:
             logging.warning(f"[Sentinel] CSV de contexto no encontrado en Azure ({BLOB_CSV_PATH}).")
             return 0, "No hay contexto."
 
-        f = io.StringIO(contenido_csv)
+        # Limpiar el formato híbrido del nuevo contexto para extraer solo la tabla CSV de biometría
+        lineas = contenido_csv.split('\n')
+        lineas_csv = []
+        leer_csv = False
+        
+        for linea in lineas:
+            if linea.startswith("Fecha,CTL"):
+                leer_csv = True
+            elif linea.startswith("[HISTORIAL"):
+                break
+                
+            if leer_csv and linea.strip():
+                lineas_csv.append(linea)
+
+        if not lineas_csv:
+            return 0, "CSV vacío o formato de contexto irreconocible."
+
+        f = io.StringIO('\n'.join(lineas_csv))
         reader = csv.DictReader(f)
         filas = list(reader)
 

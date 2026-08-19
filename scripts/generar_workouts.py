@@ -98,7 +98,7 @@ class IntervalsWorkoutGenerator:
         
         prompt_final = f"{system_prompt}{anclaje_temporal}{directriz_fase}\n{manifiesto}\n\n[DATOS BIOMÉTRICOS Y DE RENDIMIENTO ACTUALES]\n{contexto_csv}"
         
-        logging.info("[WorkoutGenerator] Contactando a la API de Gemini...")
+        logging.info("[WorkoutGenerator] Contactando a la API de Gemini (3.1 Pro)...")
         
         try:
             response = self.client.models.generate_content(
