@@ -58,12 +58,32 @@ class IntervalsWorkoutGenerator:
             elif prioridad == "B" and dias_minimos <= 5:
                 return "TAPER_B", tipo_evento, macro_data
 
+        # --- EVALUACIÓN BIO-ADAPTATIVA DE FATIGA (NUEVO BLOQUE) ---
+        # Verificamos si el TSB acumulado o el estrés exigen una descarga defensiva imprevista
+        forzar_descarga_por_fatiga = False
+        try:
+            contexto_csv = self.blob_manager.leer_texto(self.csv_file)
+            if contexto_csv:
+                lineas = contexto_csv.strip().split('\n')
+                # Buscamos la última línea con datos biométricos válidos
+                ultima_linea = [l for l in lineas if l.startswith("2026-")]
+                if ultima_linea:
+                    partes = ultima_linea[-1].split()
+                    # El TSB suele estar en la tercera columna numérica del CSV de rendimiento
+                    tsb_actual = float(partes[2])
+                    if tsb_actual < -30.0:
+                        logging.warning(f"[Alerta Fisiológica] TSB crítico detectado ({tsb_actual}). Forzando fase de DESCARGA por sobrecarga.")
+                        forzar_descarga_por_fatiga = True
+        except Exception as e:
+            logging.error(f"[Error leyendo CSV para fatiga] No se pudo evaluar el TSB: {e}")
+
         modelo = macro_data.get("modelo", "2x1")
         semana_actual = macro_data.get("semana_actual", 1)
         semanas_carga = int(modelo.split('x')[0]) 
         
-        if semana_actual > semanas_carga:
+        if forzar_descarga_por_fatiga or semana_actual > semanas_carga:
             fase = "DESCARGA"
+            # Si forzamos descarga por fatiga, mantenemos o reiniciamos inteligentemente el ciclo
             macro_data["semana_actual"] = 1 
         else:
             fase = "CARGA"
