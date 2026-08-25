@@ -79,17 +79,16 @@ class IntervalsWorkoutGenerator:
 
         modelo = macro_data.get("modelo", "2x1")
         semana_actual = macro_data.get("semana_actual", 1)
-        semanas_carga = int(modelo.split('x')[0]) 
+        semanas_carga = int(modelo.split('x')[0])  # 2
+        # La semana de descarga es estrictamente la que sigue a las de carga (ej. semana 3)
+        semana_descarga = semanas_carga + 1 
         
-        if forzar_descarga_por_fatiga or semana_actual > semanas_carga:
+        if forzar_descarga_por_fatiga or semana_actual >= semana_descarga:
             fase = "DESCARGA"
-            # Si forzamos descarga por fatiga, mantenemos o reiniciamos inteligentemente el ciclo
-            macro_data["semana_actual"] = 1 
+            macro_data["semana_actual"] = 1  # Resetea a 1 para el siguiente bloque
         else:
             fase = "CARGA"
-            macro_data["semana_actual"] = semana_actual + 1 
-            
-        return fase, tipo_evento, macro_data
+            macro_data["semana_actual"] = semana_actual + 1  # Avanza de 1 a 2, o de 2 a 3
 
     def generar_entrenamientos(self):
         logging.info("\n>>> INICIANDO MOTOR DE GENERACIÓN DE WORKOUTS <<<")
