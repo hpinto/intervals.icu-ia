@@ -32,9 +32,9 @@ class IntervalsWorkoutGenerator:
 
     def _determinar_fase(self, macro_data):
         hoy = datetime.date.today()
-        fase = "CARGA"
         tipo_evento = ""
         
+        # 1. EVALUAR CARRERAS (TAPER)
         carreras = macro_data.get("calendario_carreras", [])
         carrera_proxima = None
         dias_minimos = 9999
@@ -49,27 +49,26 @@ class IntervalsWorkoutGenerator:
             except ValueError:
                 logging.error("[Error] Formato de fecha inválido en calendario_carreras. Use YYYY-MM-DD.")
         
+        fase_taper = None
         if carrera_proxima:
             prioridad = carrera_proxima.get("prioridad", "C")
             tipo_evento = carrera_proxima.get("tipo", "Evento General")
             
             if prioridad == "A" and dias_minimos <= 14:
-                return "TAPER_A", tipo_evento, macro_data
+                fase_taper = "TAPER_A"
             elif prioridad == "B" and dias_minimos <= 5:
-                return "TAPER_B", tipo_evento, macro_data
+                fase_taper = "TAPER_B"
 
-        # --- EVALUACIÓN BIO-ADAPTATIVA DE FATIGA (NUEVO BLOQUE) ---
-        # Verificamos si el TSB acumulado o el estrés exigen una descarga defensiva imprevista
+        # 2. EVALUACIÓN BIO-ADAPTATIVA DE FATIGA (DEFENSIVA)
         forzar_descarga_por_fatiga = False
         try:
             contexto_csv = self.blob_manager.leer_texto(self.csv_file)
             if contexto_csv:
                 lineas = contexto_csv.strip().split('\n')
-                # Buscamos la última línea con datos biométricos válidos
                 ultima_linea = [l for l in lineas if l.startswith("2026-")]
                 if ultima_linea:
                     partes = ultima_linea[-1].split()
-                    # El TSB suele estar en la tercera columna numérica del CSV de rendimiento
+                    # El TSB se encuentra evaluando la columna correspondiente en el CSV de rendimiento
                     tsb_actual = float(partes[2])
                     if tsb_actual < -30.0:
                         logging.warning(f"[Alerta Fisiológica] TSB crítico detectado ({tsb_actual}). Forzando fase de DESCARGA por sobrecarga.")
@@ -77,18 +76,48 @@ class IntervalsWorkoutGenerator:
         except Exception as e:
             logging.error(f"[Error leyendo CSV para fatiga] No se pudo evaluar el TSB: {e}")
 
+        # 3. MÁQUINA DE ESTADOS DEL MACROCICLO DINÁMICO
         modelo = macro_data.get("modelo", "2x1")
-        semana_actual = macro_data.get("semana_actual", 1)
-        semanas_carga = int(modelo.split('x')[0])  # 2
-        # La semana de descarga es estrictamente la que sigue a las de carga (ej. semana 3)
-        semana_descarga = semanas_carga + 1 
+        partes_modelo = modelo.split('x')
+        semanas_carga = int(partes_modelo[0])
+        semanas_descarga = int(partes_modelo[1]) if len(partes_modelo) > 1 else 1
+        total_semanas_ciclo = semanas_carga + semanas_descarga
         
-        if forzar_descarga_por_fatiga or semana_actual >= semana_descarga:
-            fase = "DESCARGA"
-            macro_data["semana_actual"] = 1  # Resetea a 1 para el siguiente bloque
+        # Leemos el estado futuro guardado en la ejecución anterior
+        semana_a_ejecutar = macro_data.get("semana_proxima", macro_data.get("semana_actual", 1))
+        
+        # 3.1 Definir la fase de ESTA semana (lo que se ejecutará ahora)
+        if forzar_descarga_por_fatiga:
+            fase_actual = "DESCARGA"
+            semana_a_ejecutar = semanas_carga + 1 # Alineamos al primer bloque de descarga
+        elif semana_a_ejecutar > semanas_carga:
+            fase_actual = "DESCARGA"
+            if semana_a_ejecutar > total_semanas_ciclo: # Auto-corrección si se corrompe el JSON
+                semana_a_ejecutar = semanas_carga + 1
         else:
-            fase = "CARGA"
-            macro_data["semana_actual"] = semana_actual + 1  # Avanza de 1 a 2, o de 2 a 3
+            fase_actual = "CARGA"
+            
+        # 3.2 Calcular el estado para la PRÓXIMA semana
+        semana_proxima_num = semana_a_ejecutar + 1
+        
+        if semana_proxima_num > total_semanas_ciclo:
+            semana_proxima_num = 1
+            fase_proxima = "CARGA"
+        elif semana_proxima_num > semanas_carga:
+            fase_proxima = "DESCARGA"
+        else:
+            fase_proxima = "CARGA"
+
+        # 4. APLICAR TAPER SI CORRESPONDE (Sobrescribe la fase actual para el prompt, mantiene contadores)
+        fase_final_ejecucion = fase_taper if fase_taper else fase_actual
+        
+        # 5. ACTUALIZAR EL JSON CON ESTRUCTURA LEGIBLE
+        macro_data["semana_actual"] = semana_a_ejecutar
+        macro_data["semana_actual_desc"] = fase_final_ejecucion
+        macro_data["semana_proxima"] = semana_proxima_num
+        macro_data["semana_proxima_desc"] = fase_proxima
+            
+        return fase_final_ejecucion, tipo_evento, macro_data
 
     def generar_entrenamientos(self):
         logging.info("\n>>> INICIANDO MOTOR DE GENERACIÓN DE WORKOUTS <<<")
@@ -111,6 +140,7 @@ class IntervalsWorkoutGenerator:
         fase, tipo_evento, nuevo_macro_data = self._determinar_fase(macro_data)
         logging.info(f"[Fase Estratégica Calculada] {fase}")
         
+        # Guardar en Azure con el nuevo esquema ordenado
         self.blob_manager.guardar_texto(self.macro_file, json.dumps(nuevo_macro_data, indent=4))
         
         system_prompt = self.blob_manager.leer_texto(self.system_prompt_file)
@@ -147,7 +177,7 @@ class IntervalsWorkoutGenerator:
         
         prompt_final = f"{system_prompt}{anclaje_temporal}{directriz_fase}\n{manifiesto}\n\n[DATOS BIOMÉTRICOS Y DE RENDIMIENTO ACTUALES]\n{contexto_csv}"
         
-        logging.info(f"[Conexión] Solicitando inferencia a Gemini Pro Latest (Prompt de {len(prompt_final)} caracteres)...")
+        logging.info(f"[Conexión] Solicitando inferencia a Gemini Pro Preview (Prompt de {len(prompt_final)} caracteres)...")
         
         try:
             response = self.client.models.generate_content(
