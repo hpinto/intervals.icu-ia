@@ -54,13 +54,22 @@ class IntervalsContextGenerator:
 
     def generar_csv_biometrico(self, wellness_data, umbrales):
         campos = [
-            "Fecha", "CTL", "ATL", "TSB", "HRV", "HR_Rest", 
-            "Sleep_Secs", "Sleep_Score", "FTP_Ride", "CSS_Swim", "Pace_Run"
+            "Fecha", "CTL", "ATL", "TSB", "HRV", "HRV_7d_Avg", "HRV_30d_Avg", 
+            "HR_Rest", "Sleep_Secs", "Sleep_Score", "FTP_Ride", "CSS_Swim", "Pace_Run"
         ]
         output = io.StringIO()
         writer = csv.DictWriter(output, fieldnames=campos)
         writer.writeheader()
         
+        # Calcular medias móviles de HRV antes de filtrar los últimos 14 días
+        hrv_historico = []
+        for item in wellness_data:
+            hrv_val = item.get("hrv")
+            if hrv_val:
+                hrv_historico.append(hrv_val)
+            item["HRV_7d_Avg"] = round(sum(hrv_historico[-7:]) / len(hrv_historico[-7:]), 1) if hrv_historico[-7:] else ""
+            item["HRV_30d_Avg"] = round(sum(hrv_historico[-30:]) / len(hrv_historico[-30:]), 1) if hrv_historico[-30:] else ""
+
         for item in wellness_data[-14:]:
             ctl = item.get("ctl") or 0
             atl = item.get("atl") or 0
@@ -70,6 +79,8 @@ class IntervalsContextGenerator:
                 "ATL": round(atl, 2),
                 "TSB": round(ctl - atl, 2),
                 "HRV": item.get("hrv", ""),
+                "HRV_7d_Avg": item.get("HRV_7d_Avg", ""),
+                "HRV_30d_Avg": item.get("HRV_30d_Avg", ""),
                 "HR_Rest": item.get("restingHR", ""),
                 "Sleep_Secs": item.get("sleepSecs", ""),
                 "Sleep_Score": item.get("sleepScore", ""),
@@ -87,17 +98,18 @@ class IntervalsContextGenerator:
         try:
             actividades = self.client.get_activities(oldest=hace_n_dias, newest=hoy_str)
         except Exception as e:
-            return f"Error API Actividades: {e}"
+            return f"Error API Actividades: {e}", ""
 
         if not actividades:
-            return "No se registraron actividades en los últimos 7 días."
+            return "No se registraron actividades en los últimos 7 días.", ""
 
         output = io.StringIO()
-        campos = ["Fecha", "Deporte", "Nombre", "Duracion_m", "TSS"]
+        campos = ["Fecha", "Deporte", "Nombre", "Duracion_m", "TSS", "Decoupling"]
         writer = csv.DictWriter(output, fieldnames=campos)
         writer.writeheader()
 
         vistos = set()
+        zonas_acumuladas = [0] * 7 # Contenedor para Z1 a Z7 (Intervals a veces reporta hasta 7)
 
         for act in actividades:
             fecha = act.get("start_date_local", "").split("T")[0]
@@ -106,7 +118,14 @@ class IntervalsContextGenerator:
             segundos = act.get("moving_time") or act.get("elapsed_time") or 0
             minutos = round(segundos / 60)
             carga = act.get("icu_training_load") or act.get("icu_joules_load") or 0
+            decoupling = act.get("icu_decoupling") or act.get("decoupling") or ""
             
+            # Acumulador de Zonas
+            zonas = act.get("icu_hr_zones") or act.get("icu_power_zones") or []
+            for i, tiempo_en_zona in enumerate(zonas):
+                if i < len(zonas_acumuladas):
+                    zonas_acumuladas[i] += tiempo_en_zona
+
             firma = f"{fecha}_{tipo}_{minutos}_{carga}"
 
             if firma not in vistos:
@@ -116,25 +135,37 @@ class IntervalsContextGenerator:
                     "Deporte": tipo,
                     "Nombre": nombre,
                     "Duracion_m": minutos,
-                    "TSS": carga
+                    "TSS": carga,
+                    "Decoupling": round(decoupling, 2) if isinstance(decoupling, (int, float)) else decoupling
                 })
 
-        return output.getvalue().strip()
+        # Calcular porcentajes de polarización
+        tiempo_total_zonas = sum(zonas_acumuladas)
+        resumen_zonas = "[POLARIZACIÓN REAL ÚLTIMOS 7 DÍAS]\nDistribución de Intensidad: "
+        if tiempo_total_zonas > 0:
+            porcentajes = [round((z / tiempo_total_zonas) * 100, 1) for z in zonas_acumuladas[:5]]
+            resumen_zonas += f"Z1: {porcentajes[0]}% | Z2: {porcentajes[1]}% | Z3: {porcentajes[2]}% | Z4: {porcentajes[3]}% | Z5+: {porcentajes[4]}%\n"
+        else:
+            resumen_zonas += "Datos de zonas cardíacas/potencia insuficientes en los últimos 7 días.\n"
+
+        return output.getvalue().strip(), resumen_zonas
 
     def generar_csv(self):
         try:
+            # Asumimos que get_wellness trae al menos 30 días para que la media móvil funcione
             wellness_data = self.client.get_wellness()
             umbrales = self.obtener_umbrales()
             
             csv_biometria = self.generar_csv_biometrico(wellness_data, umbrales)
-            tabla_actividades = self.generar_resumen_actividades_previas(dias=7)
+            tabla_actividades, resumen_zonas = self.generar_resumen_actividades_previas(dias=7)
             
             contexto_completo = (
                 "[BIOMETRÍA Y RECUPERACIÓN (ÚLTIMOS 14 DÍAS)]\n"
                 f"{csv_biometria}\n\n"
                 "[HISTORIAL DE ESTÍMULOS REALIZADOS (ÚLTIMOS 7 DÍAS)]\n"
                 "REGLA DE VARIABILIDAD: Queda PROHIBIDO replicar la misma distribución de intensidades y deportes del microciclo previo. Aplica ondulación de cargas.\n"
-                f"{tabla_actividades}\n"
+                f"{tabla_actividades}\n\n"
+                f"{resumen_zonas}"
             )
             
             exito = self.blob_manager.guardar_texto(BLOB_CSV_PATH, contexto_completo)
