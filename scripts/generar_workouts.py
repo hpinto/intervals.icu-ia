@@ -56,7 +56,7 @@ class IntervalsWorkoutGenerator:
             
             if prioridad == "A" and dias_minimos <= 14:
                 fase_taper = "TAPER_A"
-            elif prioridad == "B" and dias_minimos <= 5:
+            elif prioridad == "B" and dias_minimos <= 7:
                 fase_taper = "TAPER_B"
 
         # 2. EVALUACIÓN BIO-ADAPTATIVA DE FATIGA (DEFENSIVA)

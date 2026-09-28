@@ -51,7 +51,47 @@ class IntervalsContextGenerator:
                     umbrales["Pace_Run"] = self._convertir_ms_a_ritmo(velocidad_ms, 1000)
 
         return umbrales
-
+def obtener_holidays_hasta_domingo(self):
+        hoy = datetime.date.today()
+        
+        # Si hoy es domingo, leemos hasta el próximo domingo. Si no, leemos hasta el domingo de esta semana.
+        if hoy.weekday() == 6:
+            dias_para_domingo = 7
+        else:
+            dias_para_domingo = 6 - hoy.weekday()
+            
+        domingo = hoy + datetime.timedelta(days=dias_para_domingo)
+        
+        hoy_str = hoy.isoformat()
+        domingo_str = domingo.isoformat()
+        
+        url = f"{self.client.base_url}/athlete/{self.client.athlete_id}/events?oldest={hoy_str}&newest={domingo_str}"
+        
+        try:
+            # Reutilizamos el método de autenticación nativo
+            response = requests.get(url, auth=self.client._get_auth(), timeout=30)
+            response.raise_for_status()
+            eventos = response.json()
+            
+            holidays = []
+            for ev in eventos:
+                # Intervals identifica los feriados bajo la categoría HOLIDAY
+                if ev.get("category") == "HOLIDAY":
+                    fecha = ev.get("start_date_local", "").split("T")[0]
+                    holidays.append(fecha)
+                    
+            if holidays:
+                fechas_str = ", ".join(holidays)
+                return (
+                    f"\n\n[DÍAS BLOQUEADOS - HOLIDAY]\n"
+                    f"REGLA DE EXCEPCIÓN ABSOLUTA: Las siguientes fechas están marcadas como Holiday (viaje/descanso) en la plataforma visual: {fechas_str}. "
+                    f"Queda ESTRICTAMENTE PROHIBIDO generar cualquier tipo de entrenamiento para estas fechas. Ignora el manifiesto para estos días específicos."
+                )
+            return ""
+        except Exception as e:
+            print(f"[Error] Falló la extracción de Holidays desde la API: {e}")
+            return ""
+        
     def generar_csv_biometrico(self, wellness_data, umbrales):
         campos = [
             "Fecha", "CTL", "ATL", "TSB", "HRV", "HRV_7d_Avg", "HRV_30d_Avg", 
@@ -158,14 +198,16 @@ class IntervalsContextGenerator:
             
             csv_biometria = self.generar_csv_biometrico(wellness_data, umbrales)
             tabla_actividades, resumen_zonas = self.generar_resumen_actividades_previas(dias=7)
-            
+            bloqueo_holiday = self.obtener_holidays_hasta_domingo()
+
             contexto_completo = (
                 "[BIOMETRÍA Y RECUPERACIÓN (ÚLTIMOS 14 DÍAS)]\n"
                 f"{csv_biometria}\n\n"
                 "[HISTORIAL DE ESTÍMULOS REALIZADOS (ÚLTIMOS 7 DÍAS)]\n"
                 "REGLA DE VARIABILIDAD: Queda PROHIBIDO replicar la misma distribución de intensidades y deportes del microciclo previo. Aplica ondulación de cargas.\n"
                 f"{tabla_actividades}\n\n"
-                f"{resumen_zonas}"
+                f"{resumen_zonas}\n\n"
+                f"{bloqueo_holiday}"
             )
             
             exito = self.blob_manager.guardar_texto(BLOB_CSV_PATH, contexto_completo)
