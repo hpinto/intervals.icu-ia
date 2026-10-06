@@ -92,7 +92,7 @@ def obtener_holidays_hasta_domingo(self):
             print(f"[Error] Falló la extracción de Holidays desde la API: {e}")
             return ""
         
-    def generar_csv_biometrico(self, wellness_data, umbrales):
+def generar_csv_biometrico(self, wellness_data, umbrales):
         campos = [
             "Fecha", "CTL", "ATL", "TSB", "HRV", "HRV_7d_Avg", "HRV_30d_Avg", 
             "HR_Rest", "Sleep_Secs", "Sleep_Score", "FTP_Ride", "CSS_Swim", "Pace_Run"
