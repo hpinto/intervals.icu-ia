@@ -51,7 +51,8 @@ class IntervalsContextGenerator:
                     umbrales["Pace_Run"] = self._convertir_ms_a_ritmo(velocidad_ms, 1000)
 
         return umbrales
-def obtener_holidays_hasta_domingo(self):
+
+    def obtener_holidays_hasta_domingo(self):
         hoy = datetime.date.today()
         
         # Si hoy es domingo, leemos hasta el próximo domingo. Si no, leemos hasta el domingo de esta semana.
@@ -92,7 +93,7 @@ def obtener_holidays_hasta_domingo(self):
             print(f"[Error] Falló la extracción de Holidays desde la API: {e}")
             return ""
         
-def generar_csv_biometrico(self, wellness_data, umbrales):
+    def generar_csv_biometrico(self, wellness_data, umbrales):
         campos = [
             "Fecha", "CTL", "ATL", "TSB", "HRV", "HRV_7d_Avg", "HRV_30d_Avg", 
             "HR_Rest", "Sleep_Secs", "Sleep_Score", "FTP_Ride", "CSS_Swim", "Pace_Run"
