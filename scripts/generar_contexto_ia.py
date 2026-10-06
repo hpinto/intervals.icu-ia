@@ -52,10 +52,9 @@ class IntervalsContextGenerator:
 
         return umbrales
 
-    def obtener_holidays_hasta_domingo(self):
+    def obtener_dias_bloqueados_hasta_domingo(self):
         hoy = datetime.date.today()
         
-        # Si hoy es domingo, leemos hasta el próximo domingo. Si no, leemos hasta el domingo de esta semana.
         if hoy.weekday() == 6:
             dias_para_domingo = 7
         else:
@@ -69,28 +68,28 @@ class IntervalsContextGenerator:
         url = f"{self.client.base_url}/athlete/{self.client.athlete_id}/events?oldest={hoy_str}&newest={domingo_str}"
         
         try:
-            # Reutilizamos el método de autenticación nativo
             response = requests.get(url, auth=self.client._get_auth(), timeout=30)
             response.raise_for_status()
             eventos = response.json()
             
-            holidays = []
+            dias_bloqueados = []
             for ev in eventos:
-                # Intervals identifica los feriados bajo la categoría HOLIDAY
-                if ev.get("category") == "HOLIDAY":
+                categoria = ev.get("category", "").upper()
+                # Interceptamos Vacaciones, Enfermedad y Lesiones
+                if categoria in ["HOLIDAY", "SICK", "INJURY"]:
                     fecha = ev.get("start_date_local", "").split("T")[0]
-                    holidays.append(fecha)
+                    dias_bloqueados.append(f"{fecha} ({categoria})")
                     
-            if holidays:
-                fechas_str = ", ".join(holidays)
+            if dias_bloqueados:
+                fechas_str = ", ".join(dias_bloqueados)
                 return (
-                    f"\n\n[DÍAS BLOQUEADOS - HOLIDAY]\n"
-                    f"REGLA DE EXCEPCIÓN ABSOLUTA: Las siguientes fechas están marcadas como Holiday (viaje/descanso) en la plataforma visual: {fechas_str}. "
-                    f"Queda ESTRICTAMENTE PROHIBIDO generar cualquier tipo de entrenamiento para estas fechas. Ignora el manifiesto para estos días específicos."
+                    f"\n\n[DÍAS BLOQUEADOS - REPOSO MÉDICO O VIAJE]\n"
+                    f"REGLA DE EXCEPCIÓN ABSOLUTA: Las siguientes fechas están marcadas en la plataforma visual con imposibilidad de entrenar: {fechas_str}. "
+                    f"Queda ESTRICTAMENTE PROHIBIDO generar cualquier tipo de entrenamiento para estas fechas. Fuerza descanso total sin excepciones."
                 )
             return ""
         except Exception as e:
-            print(f"[Error] Falló la extracción de Holidays desde la API: {e}")
+            print(f"[Error] Falló la extracción de eventos desde la API: {e}")
             return ""
         
     def generar_csv_biometrico(self, wellness_data, umbrales):
@@ -102,7 +101,6 @@ class IntervalsContextGenerator:
         writer = csv.DictWriter(output, fieldnames=campos)
         writer.writeheader()
         
-        # Calcular medias móviles de HRV antes de filtrar los últimos 14 días
         hrv_historico = []
         for item in wellness_data:
             hrv_val = item.get("hrv")
@@ -150,7 +148,7 @@ class IntervalsContextGenerator:
         writer.writeheader()
 
         vistos = set()
-        zonas_acumuladas = [0] * 7 # Contenedor para Z1 a Z7 (Intervals a veces reporta hasta 7)
+        zonas_acumuladas = [0] * 7 
 
         for act in actividades:
             fecha = act.get("start_date_local", "").split("T")[0]
@@ -161,7 +159,6 @@ class IntervalsContextGenerator:
             carga = act.get("icu_training_load") or act.get("icu_joules_load") or 0
             decoupling = act.get("icu_decoupling") or act.get("decoupling") or ""
             
-            # Acumulador de Zonas
             zonas = act.get("icu_hr_zones") or act.get("icu_power_zones") or []
             for i, tiempo_en_zona in enumerate(zonas):
                 if i < len(zonas_acumuladas):
@@ -180,7 +177,6 @@ class IntervalsContextGenerator:
                     "Decoupling": round(decoupling, 2) if isinstance(decoupling, (int, float)) else decoupling
                 })
 
-        # Calcular porcentajes de polarización
         tiempo_total_zonas = sum(zonas_acumuladas)
         resumen_zonas = "[POLARIZACIÓN REAL ÚLTIMOS 7 DÍAS]\nDistribución de Intensidad: "
         if tiempo_total_zonas > 0:
@@ -193,13 +189,12 @@ class IntervalsContextGenerator:
 
     def generar_csv(self):
         try:
-            # Asumimos que get_wellness trae al menos 30 días para que la media móvil funcione
             wellness_data = self.client.get_wellness()
             umbrales = self.obtener_umbrales()
             
             csv_biometria = self.generar_csv_biometrico(wellness_data, umbrales)
             tabla_actividades, resumen_zonas = self.generar_resumen_actividades_previas(dias=7)
-            bloqueo_holiday = self.obtener_holidays_hasta_domingo()
+            bloqueo_medico = self.obtener_dias_bloqueados_hasta_domingo()
 
             contexto_completo = (
                 "[BIOMETRÍA Y RECUPERACIÓN (ÚLTIMOS 14 DÍAS)]\n"
@@ -208,7 +203,7 @@ class IntervalsContextGenerator:
                 "REGLA DE VARIABILIDAD: Queda PROHIBIDO replicar la misma distribución de intensidades y deportes del microciclo previo. Aplica ondulación de cargas.\n"
                 f"{tabla_actividades}\n\n"
                 f"{resumen_zonas}\n\n"
-                f"{bloqueo_holiday}"
+                f"{bloqueo_medico}"
             )
             
             exito = self.blob_manager.guardar_texto(BLOB_CSV_PATH, contexto_completo)
