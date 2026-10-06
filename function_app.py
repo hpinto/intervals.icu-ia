@@ -55,12 +55,8 @@ def timer_orquestador_inteligente(mytimer: func.TimerRequest) -> None:
         logging.info("---> Ejecutando 1/4: Contexto IA")
         IntervalsContextGenerator().generar_csv()
         
-        # Cortafuegos Estructural: Bloqueo de Inferencia Diaria
-        if hoy_dt.weekday() == 0:
-            logging.info("---> Ejecutando 2/4: Inferencia Gemini (Día Lunes - Generación Semanal Autorizada)")
-            IntervalsWorkoutGenerator().generar_entrenamientos()
-        else:
-            logging.info("---> Omitiendo 2/4: Inferencia Gemini (Bloqueada de Martes a Domingo para evitar alucinaciones algorítmicas)")
+        logging.info("---> Ejecutando 2/4: Inferencia Gemini")
+        IntervalsWorkoutGenerator().generar_entrenamientos()
         
         logging.info("---> Ejecutando 3/4: Mutación Sentinel")
         IntervalsSentinel().ejecutar()

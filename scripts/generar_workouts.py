@@ -122,14 +122,18 @@ class IntervalsWorkoutGenerator:
     def generar_entrenamientos(self):
         logging.info("\n>>> INICIANDO MOTOR DE GENERACIÓN DE WORKOUTS <<<")
         
-        # VALIDACIÓN DE IDEMPOTENCIA (LOCK)
+        # VALIDACIÓN DE IDEMPOTENCIA (LOCK) Y PURGA
         hoy_date = datetime.date.today()
         hoy_str = hoy_date.isoformat()
         
         lock_existente = self.blob_manager.leer_texto(self.lock_file)
-        if lock_existente and hoy_str in lock_existente:
-            logging.warning(f"[Lock] Ya existe un registro de ejecución para hoy ({hoy_str}). Abortando para evitar duplicidad.")
-            return
+        if lock_existente:
+            if hoy_str in lock_existente:
+                logging.warning(f"[Lock] Ya existe un registro de ejecución para hoy ({hoy_str}). Abortando para evitar duplicidad.")
+                return
+            else:
+                logging.info("[Lock] Purgando candado fosilizado de días anteriores...")
+                self.blob_manager.eliminar_archivo(self.lock_file)
 
         macro_str = self.blob_manager.leer_texto(self.macro_file)
         if not macro_str:
@@ -164,7 +168,12 @@ class IntervalsWorkoutGenerator:
         dias_es = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
         dia_str = dias_es[hoy_date.weekday()]
         
-        dias_para_domingo = 6 - hoy_date.weekday()
+        # Corrección: Proyección a 7 días si se ejecuta en domingo
+        if hoy_date.weekday() == 6:
+            dias_para_domingo = 7
+        else:
+            dias_para_domingo = 6 - hoy_date.weekday()
+            
         domingo_date = hoy_date + datetime.timedelta(days=dias_para_domingo)
         domingo_str = domingo_date.isoformat()
 
