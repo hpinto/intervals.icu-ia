@@ -62,34 +62,50 @@ class IntervalsContextGenerator:
             
         domingo = hoy + datetime.timedelta(days=dias_para_domingo)
         
-        hoy_str = hoy.isoformat()
+        # Ampliamos la ventana de búsqueda hacia atrás para capturar eventos que empezaron antes de hoy
+        ventana_inicio = (hoy - datetime.timedelta(days=7)).isoformat()
         domingo_str = domingo.isoformat()
         
-        url = f"{self.client.base_url}/athlete/{self.client.athlete_id}/events?oldest={hoy_str}&newest={domingo_str}"
+        url = f"{self.client.base_url}/athlete/{self.client.athlete_id}/events?oldest={ventana_inicio}&newest={domingo_str}"
         
         try:
             response = requests.get(url, auth=self.client._get_auth(), timeout=30)
             response.raise_for_status()
             eventos = response.json()
             
-            dias_bloqueados = []
+            dias_bloqueados = set()
             for ev in eventos:
                 categoria = ev.get("category", "").upper()
-                # Interceptamos Vacaciones, Enfermedad y Lesiones
                 if categoria in ["HOLIDAY", "SICK", "INJURY"]:
-                    fecha = ev.get("start_date_local", "").split("T")[0]
-                    dias_bloqueados.append(f"{fecha} ({categoria})")
+                    start_str = ev.get("start_date_local", "").split("T")[0]
+                    # Si no existe end_date, asumimos que el evento dura 1 solo día
+                    end_str = ev.get("end_date_local", "").split("T")[0] if ev.get("end_date_local") else start_str
                     
+                    try:
+                        start_d = datetime.datetime.strptime(start_str, "%Y-%m-%d").date()
+                        end_d = datetime.datetime.strptime(end_str, "%Y-%m-%d").date()
+                        
+                        # Expandir el rango completo de fechas
+                        delta = (end_d - start_d).days
+                        for i in range(delta + 1):
+                            dia_rango = start_d + datetime.timedelta(days=i)
+                            # Guardar en la lista solo si el día bloqueado es desde hoy en adelante
+                            if hoy <= dia_rango <= domingo:
+                                dias_bloqueados.add(f"{dia_rango.isoformat()} ({categoria})")
+                    except ValueError:
+                        continue
+                        
             if dias_bloqueados:
-                fechas_str = ", ".join(dias_bloqueados)
+                # Ordenar cronológicamente las fechas antes de enviarlas al LLM
+                fechas_str = ", ".join(sorted(list(dias_bloqueados)))
                 return (
                     f"\n\n[DÍAS BLOQUEADOS - REPOSO MÉDICO O VIAJE]\n"
-                    f"REGLA DE EXCEPCIÓN ABSOLUTA: Las siguientes fechas están marcadas en la plataforma visual con imposibilidad de entrenar: {fechas_str}. "
+                    f"REGLA DE EXCEPCIÓN ABSOLUTA: Las siguientes fechas están marcadas en la plataforma visual con imposibilidad médica de entrenar: {fechas_str}. "
                     f"Queda ESTRICTAMENTE PROHIBIDO generar cualquier tipo de entrenamiento para estas fechas. Fuerza descanso total sin excepciones."
                 )
             return ""
         except Exception as e:
-            print(f"[Error] Falló la extracción de eventos desde la API: {e}")
+            print(f"[Error] Falló la extracción de eventos médicos desde la API: {e}")
             return ""
         
     def generar_csv_biometrico(self, wellness_data, umbrales):
