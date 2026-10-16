@@ -51,7 +51,6 @@ class IntervalsWorkoutGenerator:
         
         fase_taper = None
         if carrera_proxima:
-            # Ahora la duración del taper la dicta el JSON explícitamente, con un fallback de 7 días
             dias_taper = carrera_proxima.get("dias_taper", 7)
             prioridad = carrera_proxima.get("prioridad", "C")
             tipo_evento = carrera_proxima.get("tipo", "Evento General")
@@ -150,14 +149,15 @@ class IntervalsWorkoutGenerator:
             logging.error(f"[Error Crítico] No se encontró {self.csv_file}. Abortando.")
             return
         
-        # Inyección dinámica del calendario de carreras
+        # Inyección dinámica del calendario de carreras con topografía
         carreras = nuevo_macro_data.get("calendario_carreras", [])
-        bloque_calendario = "\n[CALENDARIO DE COMPETENCIAS]\n"
+        bloque_calendario = "\n[CALENDARIO DE COMPETENCIAS Y TOPOGRAFÍA]\n"
         if carreras:
             bloque_calendario += "El atleta tiene los siguientes eventos programados en su temporada:\n"
             for c in carreras:
-                bloque_calendario += f"- {c.get('fecha')}: {c.get('tipo')} (Prioridad {c.get('prioridad')})\n"
-            bloque_calendario += "ADAPTACIÓN BIOMECÁNICA: Ajusta los estímulos específicos y la recuperación de acuerdo a la cercanía y tipo del próximo evento listado.\n"
+                desc = c.get('descripcion', 'Sin descripción específica.')
+                bloque_calendario += f"- {c.get('fecha')}: {c.get('tipo')} (Prioridad {c.get('prioridad')}). Características: {desc}\n"
+            bloque_calendario += "ADAPTACIÓN BIOMECÁNICA: Ajusta los estímulos específicos y la recuperación de acuerdo a la cercanía, tipo y topografía del próximo evento listado.\n"
         else:
             bloque_calendario += "No hay competencias próximas registradas. Aplica entrenamiento de base y desarrollo general.\n"
 
@@ -189,7 +189,6 @@ class IntervalsWorkoutGenerator:
             f"Asegura que los entrenamientos de mayor volumen y tiradas largas se programen orgánicamente para el fin de semana (sábado y domingo).\n"
         )
         
-        # Ensamblaje final unificando el calendario JSON y el Manifiesto
         prompt_final = f"{system_prompt}{anclaje_temporal}{bloque_calendario}{directriz_fase}\n{manifiesto}\n\n[DATOS BIOMÉTRICOS Y DE RENDIMIENTO ACTUALES]\n{contexto_csv}"
         
         logging.info(f"[Conexión] Solicitando inferencia a Gemini Pro Preview (Prompt de {len(prompt_final)} caracteres)...")
