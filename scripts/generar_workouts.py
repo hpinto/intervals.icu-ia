@@ -34,7 +34,7 @@ class IntervalsWorkoutGenerator:
         hoy = datetime.date.today()
         tipo_evento = ""
         
-        # 1. EVALUAR CARRERAS (TAPER)
+        # 1. EVALUAR CARRERAS (TAPER DINÁMICO)
         carreras = macro_data.get("calendario_carreras", [])
         carrera_proxima = None
         dias_minimos = 9999
@@ -51,13 +51,16 @@ class IntervalsWorkoutGenerator:
         
         fase_taper = None
         if carrera_proxima:
+            # Ahora la duración del taper la dicta el JSON explícitamente, con un fallback de 7 días
+            dias_taper = carrera_proxima.get("dias_taper", 7)
             prioridad = carrera_proxima.get("prioridad", "C")
             tipo_evento = carrera_proxima.get("tipo", "Evento General")
             
-            if prioridad == "A" and dias_minimos <= 14:
-                fase_taper = "TAPER_A"
-            elif prioridad == "B" and dias_minimos <= 7:
-                fase_taper = "TAPER_B"
+            if dias_minimos <= dias_taper:
+                if prioridad == "A":
+                    fase_taper = "TAPER_A"
+                else:
+                    fase_taper = "TAPER_B"
 
         # 2. EVALUACIÓN BIO-ADAPTATIVA DE FATIGA (DEFENSIVA)
         forzar_descarga_por_fatiga = False
@@ -68,7 +71,6 @@ class IntervalsWorkoutGenerator:
                 ultima_linea = [l for l in lineas if l.startswith("2026-")]
                 if ultima_linea:
                     partes = ultima_linea[-1].split()
-                    # El TSB se encuentra evaluando la columna correspondiente en el CSV de rendimiento
                     tsb_actual = float(partes[2])
                     if tsb_actual < -30.0:
                         logging.warning(f"[Alerta Fisiológica] TSB crítico detectado ({tsb_actual}). Forzando fase de DESCARGA por sobrecarga.")
@@ -83,21 +85,18 @@ class IntervalsWorkoutGenerator:
         semanas_descarga = int(partes_modelo[1]) if len(partes_modelo) > 1 else 1
         total_semanas_ciclo = semanas_carga + semanas_descarga
         
-        # Leemos el estado futuro guardado en la ejecución anterior
         semana_a_ejecutar = macro_data.get("semana_proxima", macro_data.get("semana_actual", 1))
         
-        # 3.1 Definir la fase de ESTA semana (lo que se ejecutará ahora)
         if forzar_descarga_por_fatiga:
             fase_actual = "DESCARGA"
-            semana_a_ejecutar = semanas_carga + 1 # Alineamos al primer bloque de descarga
+            semana_a_ejecutar = semanas_carga + 1 
         elif semana_a_ejecutar > semanas_carga:
             fase_actual = "DESCARGA"
-            if semana_a_ejecutar > total_semanas_ciclo: # Auto-corrección si se corrompe el JSON
+            if semana_a_ejecutar > total_semanas_ciclo: 
                 semana_a_ejecutar = semanas_carga + 1
         else:
             fase_actual = "CARGA"
             
-        # 3.2 Calcular el estado para la PRÓXIMA semana
         semana_proxima_num = semana_a_ejecutar + 1
         
         if semana_proxima_num > total_semanas_ciclo:
@@ -108,10 +107,8 @@ class IntervalsWorkoutGenerator:
         else:
             fase_proxima = "CARGA"
 
-        # 4. APLICAR TAPER SI CORRESPONDE (Sobrescribe la fase actual para el prompt, mantiene contadores)
         fase_final_ejecucion = fase_taper if fase_taper else fase_actual
         
-        # 5. ACTUALIZAR EL JSON CON ESTRUCTURA LEGIBLE
         macro_data["semana_actual"] = semana_a_ejecutar
         macro_data["semana_actual_desc"] = fase_final_ejecucion
         macro_data["semana_proxima"] = semana_proxima_num
@@ -122,7 +119,6 @@ class IntervalsWorkoutGenerator:
     def generar_entrenamientos(self):
         logging.info("\n>>> INICIANDO MOTOR DE GENERACIÓN DE WORKOUTS <<<")
         
-        # VALIDACIÓN DE IDEMPOTENCIA (LOCK) Y PURGA
         hoy_date = datetime.date.today()
         hoy_str = hoy_date.isoformat()
         
@@ -144,7 +140,6 @@ class IntervalsWorkoutGenerator:
         fase, tipo_evento, nuevo_macro_data = self._determinar_fase(macro_data)
         logging.info(f"[Fase Estratégica Calculada] {fase}")
         
-        # Guardar en Azure con el nuevo esquema ordenado
         self.blob_manager.guardar_texto(self.macro_file, json.dumps(nuevo_macro_data, indent=4))
         
         system_prompt = self.blob_manager.leer_texto(self.system_prompt_file)
@@ -155,6 +150,17 @@ class IntervalsWorkoutGenerator:
             logging.error(f"[Error Crítico] No se encontró {self.csv_file}. Abortando.")
             return
         
+        # Inyección dinámica del calendario de carreras
+        carreras = nuevo_macro_data.get("calendario_carreras", [])
+        bloque_calendario = "\n[CALENDARIO DE COMPETENCIAS]\n"
+        if carreras:
+            bloque_calendario += "El atleta tiene los siguientes eventos programados en su temporada:\n"
+            for c in carreras:
+                bloque_calendario += f"- {c.get('fecha')}: {c.get('tipo')} (Prioridad {c.get('prioridad')})\n"
+            bloque_calendario += "ADAPTACIÓN BIOMECÁNICA: Ajusta los estímulos específicos y la recuperación de acuerdo a la cercanía y tipo del próximo evento listado.\n"
+        else:
+            bloque_calendario += "No hay competencias próximas registradas. Aplica entrenamiento de base y desarrollo general.\n"
+
         directriz_fase = ""
         if fase == "CARGA":
             directriz_fase = "\n[FASE ESTRATÉGICA: CARGA]\nAplica sobrecarga progresiva respetando las métricas de fatiga. Aumenta volumen o intensidad respecto al bloque anterior.\n"
@@ -168,7 +174,6 @@ class IntervalsWorkoutGenerator:
         dias_es = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
         dia_str = dias_es[hoy_date.weekday()]
         
-        # Corrección: Proyección a 7 días si se ejecuta en domingo
         if hoy_date.weekday() == 6:
             dias_para_domingo = 7
         else:
@@ -184,7 +189,8 @@ class IntervalsWorkoutGenerator:
             f"Asegura que los entrenamientos de mayor volumen y tiradas largas se programen orgánicamente para el fin de semana (sábado y domingo).\n"
         )
         
-        prompt_final = f"{system_prompt}{anclaje_temporal}{directriz_fase}\n{manifiesto}\n\n[DATOS BIOMÉTRICOS Y DE RENDIMIENTO ACTUALES]\n{contexto_csv}"
+        # Ensamblaje final unificando el calendario JSON y el Manifiesto
+        prompt_final = f"{system_prompt}{anclaje_temporal}{bloque_calendario}{directriz_fase}\n{manifiesto}\n\n[DATOS BIOMÉTRICOS Y DE RENDIMIENTO ACTUALES]\n{contexto_csv}"
         
         logging.info(f"[Conexión] Solicitando inferencia a Gemini Pro Preview (Prompt de {len(prompt_final)} caracteres)...")
         
@@ -225,7 +231,6 @@ class IntervalsWorkoutGenerator:
                 else:
                     logging.error(f"[Upload FAIL] Falló la subida de {nombre_archivo} a Azure.")
             
-            # ESCRITURA DEL CANDADO DE IDEMPOTENCIA TRAS ÉXITO
             self.blob_manager.guardar_texto(self.lock_file, f"Pipeline ejecutado exitosamente el {hoy_str}")
             logging.info(f"[Lock] Archivo de estado {self.lock_file} registrado en Azure.")
                     
