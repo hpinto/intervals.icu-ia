@@ -191,11 +191,11 @@ class IntervalsWorkoutGenerator:
         
         prompt_final = f"{system_prompt}{anclaje_temporal}{bloque_calendario}{directriz_fase}\n{manifiesto}\n\n[DATOS BIOMÉTRICOS Y DE RENDIMIENTO ACTUALES]\n{contexto_csv}"
         
-        logging.info(f"[Conexión] Solicitando inferencia a Gemini Pro Preview (Prompt de {len(prompt_final)} caracteres)...")
+        logging.info(f"[Conexión] Solicitando inferencia a Gemini 4 Argon (Prompt de {len(prompt_final)} caracteres)...")
         
         try:
             response = self.client.models.generate_content(
-                model='gemini-3.1-pro-preview',
+                model='gemini-4-argon',
                 contents=prompt_final,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json"
