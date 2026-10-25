@@ -1,19 +1,22 @@
-# Manifiesto de Gobernanza y Respaldo Fisiológico
+# Manifiesto de Gobernanza, Respaldo Fisiológico y Nutricional
 
 ## Umbrales Base (Automática/Fallback)
-# El orquestador lee los valores a continuación para el pipeline de ETL
 FTP: 211
 LTHR: 153
-VO2_Max: 43.0
+VO2_Max: 45.0
 CSS: 1:42
 
-## Eventos Objetivo (Contexto IA)
-# Calendario de competición y macrotemporada
-- 2026-10-04: Triatlón 5150 [Prioridad B] - Meta: Sub 2h40m (Bici ~200W, Run 4:55/km). Circuito plano y costero.
-- 2026-11-29: Triatlón 70.3 [Prioridad A] - Meta: Sub 5h15m (Bici 175-185W, Run 5:05-5:10/km). Circuito ondulado con río.
+## ESQUELETO SEMANAL ESTRICTO (Asignación Diaria Obligatoria)
+El tiempo total de entrenamiento de lunes a viernes NO debe superar las 2 horas diarias. Este es el mapa exacto de distribución:
+- LUNES: Descanso Activo o Natación Técnica + Sesión de Fuerza.
+- MARTES: Ciclismo (Intervalos/Umbral) + Trote Corto (Transición).
+- MIÉRCOLES: Natación (Resistencia) + Trote Base.
+- JUEVES: Ciclismo (Base/Z2) + Sesión de Fuerza.
+- VIERNES: Natación (Técnica/Velocidad) + Trote Corto.
+- SÁBADO: Ciclismo de Larga Distancia (Especificidad en Canyon Speedmax). Sin límite de tiempo.
+- DOMINGO: Trote Largo o Transición Larga (Brick). Sin límite de tiempo.
 
-### RESTRICCIONES DE CALENDARIO Y DISTRIBUCIÓN DE CARGA
-* **Límite de Tiempo (Lunes a Viernes):** El tiempo total de entrenamiento no debe superar las 2 horas **diarias**.
-* **Estructura Base (Lunes a Viernes):** Es obligatorio programar exactamente 3 sesiones de natación y un mínimo de 2 sesiones de acondicionamiento de fuerza.
-* **Flexibilidad de Doble Turno:** Se permite incluir sesiones cortas de ciclismo o trote de lunes a viernes (doble turno), siempre y cuando la suma total del tiempo de entrenamiento de ese día no supere las 2 horas impuestas.
-* **Volumen de Fin de Semana (Sábado y Domingo):** Días dedicados estrictamente a la resistencia específica. Solo se debe programar Ciclismo, Trote o transiciones (Brick). No existe restricción de horas máximas para los fines de semana.
+## PROTOCOLO DE NUTRICIÓN (EnduraLab ENS)
+Para todas las sesiones de fin de semana (Sábado y Domingo) o cualquier sesión que supere los 90 minutos, es OBLIGATORIO incluir instrucciones de nutrición en el campo "description" basándose estrictamente en la intensidad de la sesión:
+- Sesiones Base y Resistencia (Z1/Z2): Prescribir consumo de "EnduraLab ENS One Lactate" para asegurar el aporte basal continuo de carbohidratos y sodio.
+- Sesiones de Alta Intensidad y Race Pace (Z3/Z4+): Prescribir consumo de "EnduraLab ENS One Lactate" antes y durante los bloques críticos de intensidad para maximizar la absorción y utilizar el buffer de lactato.
