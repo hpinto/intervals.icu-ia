@@ -4,8 +4,9 @@ from requests.auth import HTTPBasicAuth
 from dotenv import load_dotenv
 from azure.storage.blob import BlobServiceClient
 
-# Cargar automáticamente el archivo .env (vital para pruebas locales; en Azure se usan los Application Settings)
 load_dotenv()
+
+SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 
 class Config:
     INTERVALS_ATHLETE_ID = os.environ.get("INTERVALS_ATHLETE_ID")
@@ -21,7 +22,6 @@ class Config:
         if not cls.AZURE_CONN_STR:
             raise ValueError("Falta la credencial AZURE_STORAGE_CONNECTION_STRING en el entorno.")
 
-# --- RUTAS LÓGICAS EN EL BLOB STORAGE (Nombres de los Blobs) ---
 BLOB_CSV_PATH = "contexto_ia.csv"
 BLOB_MANIFEST_PATH = "manifiesto.md"
 BLOB_PROMPT_PATH = "system_prompt.txt"
@@ -74,7 +74,6 @@ class AzureBlobManager:
             return False
 
     def mover_archivo(self, origen, destino):
-        """Emula un comando 'move' leyendo, guardando en nueva ruta y eliminando el original."""
         try:
             contenido = self.leer_texto(origen)
             if contenido:
@@ -97,6 +96,12 @@ class IntervalsClient:
     def _get_auth(self):
         return HTTPBasicAuth("API_KEY", self.api_key)
 
+    def get_athlete(self):
+        url = f"{self.base_url}/athlete/{self.athlete_id}"
+        response = requests.get(url, auth=self._get_auth(), timeout=30)
+        response.raise_for_status()
+        return response.json()
+
     def get_wellness(self, oldest=None, newest=None):
         url = f"{self.base_url}/athlete/{self.athlete_id}/wellness"
         params = {}
@@ -112,6 +117,21 @@ class IntervalsClient:
         if oldest: params["oldest"] = oldest
         if newest: params["newest"] = newest
         response = requests.get(url, auth=self._get_auth(), params=params, timeout=30)
+        response.raise_for_status()
+        return response.json()
+
+    def get_activity_details(self, activity_id):
+        """Obtiene el detalle de una actividad incluyendo sus intervalos (icu_intervals)."""
+        url = f"{self.base_url}/activity/{activity_id}"
+        params = {"intervals": "true"}
+        response = requests.get(url, auth=self._get_auth(), params=params, timeout=30)
+        response.raise_for_status()
+        return response.json()
+
+    def update_sport_settings(self, setting_id, payload):
+        """Actualiza vía PUT los umbrales de un deporte en sportSettings."""
+        url = f"{self.base_url}/athlete/{self.athlete_id}/sport-settings/{setting_id}"
+        response = requests.put(url, auth=self._get_auth(), json=payload, timeout=30)
         response.raise_for_status()
         return response.json()
 
@@ -131,7 +151,6 @@ class IntervalsClient:
         return response.json()
 
     def update_event(self, event_id, payload):
-        """Actualiza quirúrgicamente un evento existente en Intervals.icu (Método PUT)."""
         url = f"{self.base_url}/athlete/{self.athlete_id}/events/{event_id}"
         response = requests.put(url, auth=self._get_auth(), json=payload, timeout=30)
         response.raise_for_status()
