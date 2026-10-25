@@ -23,7 +23,7 @@ class IntervalsContextGenerator:
     def _convertir_ms_a_ritmo(self, velocidad_ms, distancia_referencia):
         if not velocidad_ms or velocidad_ms <= 0:
             return "0:00"
-        segundos_totales = distancia_referencia / velocidad_ms
+        segundos_totales = round(distancia_referencia / velocidad_ms)
         minutos = int(segundos_totales // 60)
         segundos = int(segundos_totales % 60)
         return f"{minutos}:{segundos:02d}"
@@ -34,21 +34,49 @@ class IntervalsContextGenerator:
         response.raise_for_status()
         athlete_data = response.json()
         
-        umbrales = {"FTP_Ride": 211, "CSS_Swim": "1:40", "Pace_Run": "5:19"}
+        # Valores de respaldo (Fallback) únicamente si la API devuelve campos vacíos
+        umbrales = {
+            "FTP_Ride": 211,
+            "LTHR_Ride": 153,
+            "CSS_Swim": "1:42",
+            "Pace_Run": "5:19",
+            "LTHR_Run": 153
+        }
         
-        for sport in athlete_data.get("sportSettings", []):
-            sport_id = str(sport.get("id", "")).lower()
+        sport_settings = athlete_data.get("sportSettings", [])
+        # Soportar tanto lista de objetos como diccionario según versión del endpoint
+        if isinstance(sport_settings, dict):
+            sport_settings = list(sport_settings.values())
+
+        for sport in sport_settings:
+            if not isinstance(sport, dict):
+                continue
+                
+            tipos = [str(t).lower() for t in sport.get("types", [])]
+            sport_id_str = str(sport.get("id", "")).lower()
             
-            if sport_id == "ride":
-                umbrales["FTP_Ride"] = sport.get("ftp") or 211
-            elif sport_id == "swim":
-                velocidad_ms = sport.get("thresholdSpeed")
+            # 1. CICLISMO (Ride / VirtualRide)
+            if "ride" in tipos or "virtualride" in tipos or sport_id_str == "ride":
+                ftp_manual = sport.get("ftp") or 0
+                mmp_ftp = (sport.get("mmp_model") or {}).get("ftp") or 0
+                # Si tras un test el eFTP estimado es válido o se actualizó el FTP manual, se captura
+                umbrales["FTP_Ride"] = ftp_manual if ftp_manual > 0 else (mmp_ftp or 211)
+                if sport.get("lthr"):
+                    umbrales["LTHR_Ride"] = sport.get("lthr")
+                    
+            # 2. NATACIÓN (Swim / OpenWaterSwim)
+            elif "swim" in tipos or "openwaterswim" in tipos or sport_id_str == "swim":
+                velocidad_ms = sport.get("threshold_pace") or sport.get("thresholdSpeed")
                 if velocidad_ms:
                     umbrales["CSS_Swim"] = self._convertir_ms_a_ritmo(velocidad_ms, 100)
-            elif sport_id == "run":
-                velocidad_ms = sport.get("thresholdSpeed")
+                    
+            # 3. CARRERA A PIE (Run / VirtualRun / TrailRun)
+            elif "run" in tipos or "virtualrun" in tipos or sport_id_str == "run":
+                velocidad_ms = sport.get("threshold_pace") or sport.get("thresholdSpeed")
                 if velocidad_ms:
                     umbrales["Pace_Run"] = self._convertir_ms_a_ritmo(velocidad_ms, 1000)
+                if sport.get("lthr"):
+                    umbrales["LTHR_Run"] = sport.get("lthr")
 
         return umbrales
 
@@ -61,8 +89,6 @@ class IntervalsContextGenerator:
             dias_para_domingo = 6 - hoy.weekday()
             
         domingo = hoy + datetime.timedelta(days=dias_para_domingo)
-        
-        # Ampliamos la ventana de búsqueda hacia atrás para capturar eventos que empezaron antes de hoy
         ventana_inicio = (hoy - datetime.timedelta(days=7)).isoformat()
         domingo_str = domingo.isoformat()
         
@@ -78,25 +104,21 @@ class IntervalsContextGenerator:
                 categoria = ev.get("category", "").upper()
                 if categoria in ["HOLIDAY", "SICK", "INJURY"]:
                     start_str = ev.get("start_date_local", "").split("T")[0]
-                    # Si no existe end_date, asumimos que el evento dura 1 solo día
                     end_str = ev.get("end_date_local", "").split("T")[0] if ev.get("end_date_local") else start_str
                     
                     try:
                         start_d = datetime.datetime.strptime(start_str, "%Y-%m-%d").date()
                         end_d = datetime.datetime.strptime(end_str, "%Y-%m-%d").date()
                         
-                        # Expandir el rango completo de fechas
                         delta = (end_d - start_d).days
                         for i in range(delta + 1):
                             dia_rango = start_d + datetime.timedelta(days=i)
-                            # Guardar en la lista solo si el día bloqueado es desde hoy en adelante
                             if hoy <= dia_rango <= domingo:
                                 dias_bloqueados.add(f"{dia_rango.isoformat()} ({categoria})")
                     except ValueError:
                         continue
                         
             if dias_bloqueados:
-                # Ordenar cronológicamente las fechas antes de enviarlas al LLM
                 fechas_str = ", ".join(sorted(list(dias_bloqueados)))
                 return (
                     f"\n\n[DÍAS BLOQUEADOS - REPOSO MÉDICO O VIAJE]\n"
@@ -111,7 +133,7 @@ class IntervalsContextGenerator:
     def generar_csv_biometrico(self, wellness_data, umbrales):
         campos = [
             "Fecha", "CTL", "ATL", "TSB", "HRV", "HRV_7d_Avg", "HRV_30d_Avg", 
-            "HR_Rest", "Sleep_Secs", "Sleep_Score", "FTP_Ride", "CSS_Swim", "Pace_Run"
+            "HR_Rest", "Sleep_Secs", "Sleep_Score", "FTP_Ride", "CSS_Swim", "Pace_Run", "LTHR_Run"
         ]
         output = io.StringIO()
         writer = csv.DictWriter(output, fieldnames=campos)
@@ -141,7 +163,8 @@ class IntervalsContextGenerator:
                 "Sleep_Score": item.get("sleepScore", ""),
                 "FTP_Ride": umbrales["FTP_Ride"],
                 "CSS_Swim": umbrales["CSS_Swim"],
-                "Pace_Run": umbrales["Pace_Run"]
+                "Pace_Run": umbrales["Pace_Run"],
+                "LTHR_Run": umbrales["LTHR_Run"]
             })
         return output.getvalue().strip()
 
@@ -213,6 +236,10 @@ class IntervalsContextGenerator:
             bloqueo_medico = self.obtener_dias_bloqueados_hasta_domingo()
 
             contexto_completo = (
+                "[UMBRALES FISIOLÓGICOS ACTIVOS (EXTRAÍDOS DE INTERVALS.ICU)]\n"
+                f"FTP Ciclismo: {umbrales['FTP_Ride']}W (LTHR: {umbrales['LTHR_Ride']} bpm) | "
+                f"CSS Natación: {umbrales['CSS_Swim']}/100m | "
+                f"Threshold Pace Carrera: {umbrales['Pace_Run']}/km (LTHR: {umbrales['LTHR_Run']} bpm)\n\n"
                 "[BIOMETRÍA Y RECUPERACIÓN (ÚLTIMOS 14 DÍAS)]\n"
                 f"{csv_biometria}\n\n"
                 "[HISTORIAL DE ESTÍMULOS REALIZADOS (ÚLTIMOS 7 DÍAS)]\n"
