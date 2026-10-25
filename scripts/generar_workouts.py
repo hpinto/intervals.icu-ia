@@ -30,42 +30,106 @@ class IntervalsWorkoutGenerator:
         api_key = os.environ.get("GEMINI_API_KEY")
         self.client = genai.Client(api_key=api_key) if api_key else genai.Client()
 
+    def _inferir_mesociclo_dinamico(self, hoy, carreras, mesociclo_previo, forzar_descarga):
+        """Infiere el mesociclo por Periodización Inversa y detecta transiciones para programar tests."""
+        carreras_validas = []
+        for c in carreras:
+            try:
+                f_c = datetime.datetime.strptime(c["fecha"], "%Y-%m-%d").date()
+                carreras_validas.append((f_c, c))
+            except (ValueError, KeyError):
+                logging.error("[Error] Fecha inválida en calendario_carreras. Use YYYY-MM-DD.")
+
+        carreras_validas.sort(key=lambda x: x[0])
+
+        # 1. DETECTAR FASE DE TRANSICIÓN POST-CARRERA PRIORIDAD A (Últimos 14 días)
+        for f_c, c in carreras_validas:
+            dias_pasados = (hoy - f_c).days
+            if 0 < dias_pasados <= 14 and c.get("prioridad") == "A":
+                nom = c.get("nombre", c.get("tipo", "Competencia A"))
+                Directriz = (
+                    f"\n[MESOCICLO INFERIDO DINÁMICAMENTE: TRANSICION POST-COMPETENCIA ({nom})]\n"
+                    f"REGLA OBLIGATORIA: El atleta compitió hace {dias_pasados} días en un evento Prioridad A. "
+                    f"Aplica regeneración tisular y parasimpática estricta: volumen reducido al 50%, exclusivamente Z1 y Z2 baja, cero impacto articular intenso y cero series de umbral.\n"
+                )
+                return "TRANSICION", c, Directriz
+
+        # 2. DETECTAR PRÓXIMA CARRERA INMEDIATA (PARA TAPER A O B) Y PRÓXIMA CARRERA PRIORIDAD A (RECTORA DEL MESOCICLO)
+        futuras = [(f_c, c) for f_c, c in carreras_validas if f_c >= hoy]
+        if not futuras:
+            return "BASE", None, "\n[MESOCICLO INFERIDO: BASE GENERAL]\nSin carreras futuras. Mantén desarrollo aeróbico polarizado.\n"
+
+        f_inmediata, c_inmediata = futuras[0]
+        dias_inmediata = (f_inmediata - hoy).days
+        taper_inmediata = c_inmediata.get("dias_taper", 7)
+
+        if dias_inmediata <= taper_inmediata:
+            estado_taper = "TAPER_A" if c_inmediata.get("prioridad") == "A" else "TAPER_B"
+            return estado_taper, c_inmediata, ""
+
+        # Buscar la próxima carrera Prioridad A para anclar la Periodización Inversa
+        futuras_a = [(f_c, c) for f_c, c in futuras if c.get("prioridad") == "A"]
+        f_rectora, c_rectora = futuras_a[0] if futuras_a else futuras[0]
+
+        dias_restantes_a = (f_rectora - hoy).days
+        dias_taper_a = c_rectora.get("dias_taper", 14)
+        dias_pre_taper = max(0, dias_restantes_a - dias_taper_a)
+        semanas_pre_taper = (dias_pre_taper + 6) // 7
+
+        nom_rectora = c_rectora.get("nombre", "Objetivo Principal")
+        tipo_rectora = c_rectora.get("tipo", "General")
+        meta_rectora = c_rectora.get("meta", "No especificada")
+
+        if dias_pre_taper <= 28:
+            nuevo_meso = "PEAK"
+            foco = (
+                f"Faltan {semanas_pre_taper} semanas para iniciar el Taper de {nom_rectora} ({tipo_rectora}). "
+                f"Foco en especificidad competitiva absoluta hacia la meta ({meta_rectora}), tolerancia al ritmo de carrera y eficiencia metabólica."
+            )
+        elif dias_pre_taper <= 84:
+            nuevo_meso = "BUILD"
+            foco = (
+                f"Faltan {semanas_pre_taper} semanas para el Taper de {nom_rectora} ({tipo_rectora}). "
+                f"Foco en construcción de umbral de lactato (Z3/Z4), resistencia a la fatiga y progresión específica de volumen."
+            )
+        else:
+            nuevo_meso = "BASE"
+            foco = (
+                f"Faltan {semanas_pre_taper} semanas para el Taper de {nom_rectora} ({tipo_rectora}). "
+                f"Foco en base aeróbica extensiva (Z2), capilarización, economía mecánica y acondicionamiento de fuerza estructural."
+            )
+
+        bloque_texto = f"\n[MESOCICLO INFERIDO DINÁMICAMENTE: {nuevo_meso} -> {nom_rectora}]\nDIRECTRIZ DEL MESOCICLO: {foco}\n"
+
+        # 3. DETECCIÓN DE TRANSICIÓN DE MESOCICLO PARA DISPARAR SEMANA DE TEST
+        if mesociclo_previo and mesociclo_previo != nuevo_meso and nuevo_meso in ["BASE", "BUILD", "PEAK"] and not forzar_descarga:
+            es_maraton = "marat" in tipo_rectora.lower() or "42k" in tipo_rectora.lower()
+            if es_maraton and nuevo_meso == "PEAK":
+                protocolo_test = (
+                    "Sustituye la sesión de calidad de carrera a pie (Martes o Miércoles) por un Test de Validación de Umbral: "
+                    "Calentamiento 15m Z1/Z2 + 30m contrarreloj sostenido a máximo esfuerzo aeróbico (para actualizar LTHR y Pace umbral) + 10m Z1."
+                )
+            else:
+                protocolo_test = (
+                    "Esta semana se estrena el mesociclo. Programa tests de actualización de umbrales en días separados: "
+                    "1) En Ciclismo (Martes): Test de FTP (20m máximo esfuerzo sostenido tras calentamiento). "
+                    "2) En Natación (Miércoles): Test CSS (0.400KM + 0.200KM máxima velocidad sostenida con descanso completo). "
+                    "3) En Carrera (Viernes): Test de 30m contrarreloj para determinar LTHR y Threshold Pace. "
+                    "Mantén el resto de la semana estrictamente en Z1/Z2 para asegurar frescura en las mediciones."
+                )
+            bloque_texto += (
+                f"\n[TRANSICIÓN DE MESOCICLO DETECTADA ({mesociclo_previo} -> {nuevo_meso}): SEMANA DE EVALUACIÓN ACTIVADA]\n"
+                f"ORDEN OBLIGATORIA DE TEST: {protocolo_test}\n"
+            )
+
+        return nuevo_meso, c_rectora, bloque_texto
+
     def _determinar_fase(self, macro_data):
         hoy = datetime.date.today()
-        nombre_evento = ""
-        tipo_evento = ""
-        meta_evento = ""
-        
-        # 1. EVALUAR CARRERAS (TAPER DINÁMICO)
         carreras = macro_data.get("calendario_carreras", [])
-        carrera_proxima = None
-        dias_minimos = 9999
-        
-        for carrera in carreras:
-            try:
-                fecha_c = datetime.datetime.strptime(carrera["fecha"], "%Y-%m-%d").date()
-                dias = (fecha_c - hoy).days
-                if 0 <= dias < dias_minimos:
-                    dias_minimos = dias
-                    carrera_proxima = carrera
-            except ValueError:
-                logging.error("[Error] Formato de fecha inválido en calendario_carreras. Use YYYY-MM-DD.")
-        
-        fase_taper = None
-        if carrera_proxima:
-            dias_taper = carrera_proxima.get("dias_taper", 7)
-            prioridad = carrera_proxima.get("prioridad", "C")
-            nombre_evento = carrera_proxima.get("nombre", "Competencia")
-            tipo_evento = carrera_proxima.get("tipo", "Evento General")
-            meta_evento = carrera_proxima.get("meta", "Sin meta específica definida")
-            
-            if dias_minimos <= dias_taper:
-                if prioridad == "A":
-                    fase_taper = "TAPER_A"
-                else:
-                    fase_taper = "TAPER_B"
+        mesociclo_previo = macro_data.get("mesociclo_actual")
 
-        # 2. EVALUACIÓN BIO-ADAPTATIVA DE FATIGA (DEFENSIVA)
+        # 1. EVALUACIÓN BIO-ADAPTATIVA DE FATIGA (DEFENSIVA)
         forzar_descarga_por_fatiga = False
         try:
             contexto_csv = self.blob_manager.leer_texto(self.csv_file)
@@ -73,15 +137,24 @@ class IntervalsWorkoutGenerator:
                 lineas = contexto_csv.strip().split('\n')
                 ultima_linea = [l for l in lineas if l.startswith("2026-") or l.startswith("2027-")]
                 if ultima_linea:
-                    partes = ultima_linea[-1].split()
-                    tsb_actual = float(partes[2])
+                    partes = ultima_linea[-1].split(',') if ',' in ultima_linea[-1] else ultima_linea[-1].split()
+                    tsb_actual = float(partes[3] if ',' in ultima_linea[-1] else partes[2])
                     if tsb_actual < -30.0:
                         logging.warning(f"[Alerta Fisiológica] TSB crítico detectado ({tsb_actual}). Forzando fase de DESCARGA por sobrecarga.")
                         forzar_descarga_por_fatiga = True
         except Exception as e:
             logging.error(f"[Error leyendo CSV para fatiga] No se pudo evaluar el TSB: {e}")
 
-        # 3. MÁQUINA DE ESTADOS DEL MACROCICLO DINÁMICO
+        # 2. INFERENCIA DINÁMICA DE MESOCICLO Y TAPER
+        nuevo_meso, carrera_ref, bloque_mesociclo = self._inferir_mesociclo_dinamico(
+            hoy, carreras, mesociclo_previo, forzar_descarga_por_fatiga
+        )
+
+        nombre_evento = carrera_ref.get("nombre", "Competencia") if carrera_ref else "Temporada"
+        tipo_evento = carrera_ref.get("tipo", "General") if carrera_ref else "General"
+        meta_evento = carrera_ref.get("meta", "No especificada") if carrera_ref else "No especificada"
+
+        # 3. MÁQUINA DE ESTADOS DEL MICROCICLO (2x1)
         modelo = macro_data.get("modelo", "2x1")
         partes_modelo = modelo.split('x')
         semanas_carga = int(partes_modelo[0])
@@ -90,15 +163,19 @@ class IntervalsWorkoutGenerator:
         
         semana_a_ejecutar = macro_data.get("semana_proxima", macro_data.get("semana_actual", 1))
         
-        if forzar_descarga_por_fatiga:
-            fase_actual = "DESCARGA"
+        if forzar_descarga_por_fatiga or nuevo_meso == "TRANSICION":
+            fase_micro = "DESCARGA"
             semana_a_ejecutar = semanas_carga + 1 
+        elif mesociclo_previo != nuevo_meso and nuevo_meso in ["BASE", "BUILD", "PEAK"]:
+            # Si estrenamos mesociclo, reiniciamos el contador del microciclo a Semana 1 (Carga / Test)
+            fase_micro = "CARGA"
+            semana_a_ejecutar = 1
         elif semana_a_ejecutar > semanas_carga:
-            fase_actual = "DESCARGA"
+            fase_micro = "DESCARGA"
             if semana_a_ejecutar > total_semanas_ciclo: 
                 semana_a_ejecutar = semanas_carga + 1
         else:
-            fase_actual = "CARGA"
+            fase_micro = "CARGA"
             
         semana_proxima_num = semana_a_ejecutar + 1
         
@@ -110,14 +187,18 @@ class IntervalsWorkoutGenerator:
         else:
             fase_proxima = "CARGA"
 
-        fase_final_ejecucion = fase_taper if fase_taper else fase_actual
+        if nuevo_meso in ["TAPER_A", "TAPER_B", "TRANSICION"]:
+            fase_final_ejecucion = nuevo_meso
+        else:
+            fase_final_ejecucion = fase_micro
         
+        macro_data["mesociclo_actual"] = nuevo_meso
         macro_data["semana_actual"] = semana_a_ejecutar
         macro_data["semana_actual_desc"] = fase_final_ejecucion
         macro_data["semana_proxima"] = semana_proxima_num
         macro_data["semana_proxima_desc"] = fase_proxima
             
-        return fase_final_ejecucion, nombre_evento, tipo_evento, meta_evento, macro_data
+        return fase_final_ejecucion, nuevo_meso, nombre_evento, tipo_evento, meta_evento, bloque_mesociclo, macro_data
 
     def generar_entrenamientos(self):
         logging.info("\n>>> INICIANDO MOTOR DE GENERACIÓN DE WORKOUTS <<<")
@@ -140,8 +221,8 @@ class IntervalsWorkoutGenerator:
             return
             
         macro_data = json.loads(macro_str)
-        fase, nombre_evento, tipo_evento, meta_evento, nuevo_macro_data = self._determinar_fase(macro_data)
-        logging.info(f"[Fase Estratégica Calculada] {fase}")
+        fase, meso_actual, nombre_evento, tipo_evento, meta_evento, bloque_mesociclo, nuevo_macro_data = self._determinar_fase(macro_data)
+        logging.info(f"[Mesociclo Inferido] {meso_actual} | [Fase Microciclo] {fase}")
         
         self.blob_manager.guardar_texto(self.macro_file, json.dumps(nuevo_macro_data, indent=4))
         
@@ -153,7 +234,7 @@ class IntervalsWorkoutGenerator:
             logging.error(f"[Error Crítico] No se encontró {self.csv_file}. Abortando.")
             return
         
-        # Inyección dinámica del calendario de carreras con nombre, meta, días de taper y topografía
+        # Inyección dinámica del calendario de carreras
         carreras = nuevo_macro_data.get("calendario_carreras", [])
         bloque_calendario = "\n[CALENDARIO DE COMPETENCIAS, METAS Y TOPOGRAFÍA]\n"
         if carreras:
@@ -170,9 +251,11 @@ class IntervalsWorkoutGenerator:
 
         directriz_fase = ""
         if fase == "CARGA":
-            directriz_fase = "\n[FASE ESTRATÉGICA: CARGA]\nAplica sobrecarga progresiva respetando las métricas de fatiga. Aumenta volumen o intensidad respecto al bloque anterior.\n"
+            directriz_fase = "\n[FASE DEL MICROCICLO: CARGA]\nAplica sobrecarga progresiva respetando las métricas de fatiga y el foco del mesociclo inferido. Aumenta volumen o intensidad respecto al bloque anterior.\n"
         elif fase == "DESCARGA":
-            directriz_fase = "\n[FASE ESTRATÉGICA: DESCARGA]\nREGLA OBLIGATORIA: Reduce el volumen total de la semana en un 30-40%. Prohibido programar sesiones de VO2Max o umbral sostenido. Prioriza Z1 y Z2.\n"
+            directriz_fase = "\n[FASE DEL MICROCICLO: DESCARGA]\nREGLA OBLIGATORIA: Reduce el volumen total de la semana en un 30-40%. Prohibido programar sesiones de VO2Max o umbral sostenido. Prioriza Z1 y Z2.\n"
+        elif fase == "TRANSICION":
+            directriz_fase = "\n[FASE DEL MICROCICLO: TRANSICIÓN POST-CARRERA]\nREGLA OBLIGATORIA: Semana de recuperación profunda post-competencia. Prohibido cualquier bloque en Z3, Z4 o Z5.\n"
         elif fase == "TAPER_A":
             directriz_fase = f"\n[FASE ESTRATÉGICA: TAPER PROFUNDO PARA {nombre_evento} ({tipo_evento})]\nREGLA OBLIGATORIA: Reduce el volumen de resistencia drásticamente (50%), pero MANTÉN LA INTENSIDAD. Debes incluir intervalos cortos al ritmo de la meta ({meta_evento}) enfocado en {tipo_evento}. Mantén la tensión neuromuscular sin fatiga residual.\n"
         elif fase == "TAPER_B":
@@ -196,7 +279,7 @@ class IntervalsWorkoutGenerator:
             f"Asegura que los entrenamientos de mayor volumen y tiradas largas se programen orgánicamente para el fin de semana (sábado y domingo).\n"
         )
         
-        prompt_final = f"{system_prompt}{anclaje_temporal}{bloque_calendario}{directriz_fase}\n{manifiesto}\n\n[DATOS BIOMÉTRICOS Y DE RENDIMIENTO ACTUALES]\n{contexto_csv}"
+        prompt_final = f"{system_prompt}{anclaje_temporal}{bloque_calendario}{bloque_mesociclo}{directriz_fase}\n{manifiesto}\n\n[DATOS BIOMÉTRICOS Y DE RENDIMIENTO ACTUALES]\n{contexto_csv}"
         
         logging.info(f"[Conexión] Solicitando inferencia a Gemini 4 Argon (Prompt de {len(prompt_final)} caracteres)...")
         

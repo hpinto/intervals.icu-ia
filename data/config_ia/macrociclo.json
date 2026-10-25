@@ -1,5 +1,6 @@
 {
     "modelo": "2x1",
+    "mesociclo_actual": "PEAK",
     "semana_actual": 2,
     "semana_actual_desc": "CARGA",
     "semana_proxima": 3,
