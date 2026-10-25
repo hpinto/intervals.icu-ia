@@ -1,30 +1,36 @@
 {
     "modelo": "2x1",
     "semana_actual": 2,
+    "semana_actual_desc": "CARGA",
+    "semana_proxima": 3,
+    "semana_proxima_desc": "DESCARGA",
     "calendario_carreras": [
         {
             "nombre": "Ironman 5150 Coquimbo",
             "fecha": "2026-10-04",
             "tipo": "Triatlón 5150",
             "prioridad": "B",
+            "dias_taper": 5,
             "meta": "Sub 2h40m (Ritmo carrera: Bici 34 km/h ~200W, Run 4:55/km)",
-            "descripcion": "Circuito costero plano con oleaje moderado y viento en ciclismo"
+            "descripcion": "1500mts natación en mar, 40km ciclismo con 400mts de desnivel positivo, 10km trote plano."
         },
         {
             "nombre": "Ironman 70.3 Valdivia",
             "fecha": "2026-11-29",
             "tipo": "Triatlón 70.3",
             "prioridad": "A",
+            "dias_taper": 14,
             "meta": "Sub 5h30m (Target corte 5h45m. Natación 38m, Bici 175-185W ~2h50m, Run 5:15-5:20/km ~1h52m)",
-            "descripcion": "Natación en río Calle-Calle, ciclismo ondulado con viento moderado y trote plano húmedo"
+            "descripcion": "1900mts natacion en rio calle-calle, 90km de ciclismo con 700mts desnivel positivo y 21km de trote casi plano."
         },
         {
             "nombre": "Maratón de Santiago",
             "fecha": "2027-05-16",
             "tipo": "Maratón 42K",
             "prioridad": "A",
-            "meta": "Sub 4h00m (Pace target promedio: 5:35-5:40/km sostenido)",
-            "descripcion": "Circuito urbano de asfalto con falso plano ascendente en primera mitad y descenso en segunda mitad"
+            "dias_taper": 21,
+            "meta": "Sub 4h00m (Pace promedio sostenido: 5:35-5:40/km)",
+            "descripcion": "42K de carrera a pie urbana sobre asfalto, con falso plano en primera mitad y descenso en segunda mitad."
         }
     ]
 }
