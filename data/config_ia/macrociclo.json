@@ -3,14 +3,28 @@
     "semana_actual": 2,
     "calendario_carreras": [
         {
+            "nombre": "Ironman 5150 Coquimbo",
             "fecha": "2026-10-04",
             "tipo": "Triatlón 5150",
-            "prioridad": "B"
+            "prioridad": "B",
+            "meta": "Sub 2h40m (Ritmo carrera: Bici 34 km/h ~200W, Run 4:55/km)",
+            "descripcion": "Circuito costero plano con oleaje moderado y viento en ciclismo"
         },
         {
+            "nombre": "Ironman 70.3 Valdivia",
             "fecha": "2026-11-29",
             "tipo": "Triatlón 70.3",
-            "prioridad": "A"
+            "prioridad": "A",
+            "meta": "Sub 5h30m (Target corte 5h45m. Natación 38m, Bici 175-185W ~2h50m, Run 5:15-5:20/km ~1h52m)",
+            "descripcion": "Natación en río Calle-Calle, ciclismo ondulado con viento moderado y trote plano húmedo"
+        },
+        {
+            "nombre": "Maratón de Santiago",
+            "fecha": "2027-05-16",
+            "tipo": "Maratón 42K",
+            "prioridad": "A",
+            "meta": "Sub 4h00m (Pace target promedio: 5:35-5:40/km sostenido)",
+            "descripcion": "Circuito urbano de asfalto con falso plano ascendente en primera mitad y descenso en segunda mitad"
         }
     ]
 }

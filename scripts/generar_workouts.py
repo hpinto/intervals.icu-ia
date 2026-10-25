@@ -33,6 +33,7 @@ class IntervalsWorkoutGenerator:
     def _determinar_fase(self, macro_data):
         hoy = datetime.date.today()
         tipo_evento = ""
+        meta_evento = ""
         
         # 1. EVALUAR CARRERAS (TAPER DINÁMICO)
         carreras = macro_data.get("calendario_carreras", [])
@@ -54,6 +55,7 @@ class IntervalsWorkoutGenerator:
             dias_taper = carrera_proxima.get("dias_taper", 7)
             prioridad = carrera_proxima.get("prioridad", "C")
             tipo_evento = carrera_proxima.get("tipo", "Evento General")
+            meta_evento = carrera_proxima.get("meta", "Sin meta específica definida")
             
             if dias_minimos <= dias_taper:
                 if prioridad == "A":
@@ -113,7 +115,7 @@ class IntervalsWorkoutGenerator:
         macro_data["semana_proxima"] = semana_proxima_num
         macro_data["semana_proxima_desc"] = fase_proxima
             
-        return fase_final_ejecucion, tipo_evento, macro_data
+        return fase_final_ejecucion, tipo_evento, meta_evento, macro_data
 
     def generar_entrenamientos(self):
         logging.info("\n>>> INICIANDO MOTOR DE GENERACIÓN DE WORKOUTS <<<")
@@ -136,7 +138,7 @@ class IntervalsWorkoutGenerator:
             return
             
         macro_data = json.loads(macro_str)
-        fase, tipo_evento, nuevo_macro_data = self._determinar_fase(macro_data)
+        fase, tipo_evento, meta_evento, nuevo_macro_data = self._determinar_fase(macro_data)
         logging.info(f"[Fase Estratégica Calculada] {fase}")
         
         self.blob_manager.guardar_texto(self.macro_file, json.dumps(nuevo_macro_data, indent=4))
@@ -149,15 +151,16 @@ class IntervalsWorkoutGenerator:
             logging.error(f"[Error Crítico] No se encontró {self.csv_file}. Abortando.")
             return
         
-        # Inyección dinámica del calendario de carreras con topografía
+        # Inyección dinámica del calendario de carreras con metas y topografía
         carreras = nuevo_macro_data.get("calendario_carreras", [])
-        bloque_calendario = "\n[CALENDARIO DE COMPETENCIAS Y TOPOGRAFÍA]\n"
+        bloque_calendario = "\n[CALENDARIO DE COMPETENCIAS, METAS Y TOPOGRAFÍA]\n"
         if carreras:
             bloque_calendario += "El atleta tiene los siguientes eventos programados en su temporada:\n"
             for c in carreras:
                 desc = c.get('descripcion', 'Sin descripción específica.')
-                bloque_calendario += f"- {c.get('fecha')}: {c.get('tipo')} (Prioridad {c.get('prioridad')}). Características: {desc}\n"
-            bloque_calendario += "ADAPTACIÓN BIOMECÁNICA: Ajusta los estímulos específicos y la recuperación de acuerdo a la cercanía, tipo y topografía del próximo evento listado.\n"
+                meta = c.get('meta', 'No especificada.')
+                bloque_calendario += f"- {c.get('fecha')}: {c.get('tipo')} (Prioridad {c.get('prioridad')}). Meta Objetivo: {meta}. Características: {desc}\n"
+            bloque_calendario += "ADAPTACIÓN BIOMECÁNICA Y PACING: Ajusta los ritmos de tempo, umbral y tiradas específicas en base a la Meta Objetivo y topografía del evento más cercano.\n"
         else:
             bloque_calendario += "No hay competencias próximas registradas. Aplica entrenamiento de base y desarrollo general.\n"
 
@@ -167,9 +170,9 @@ class IntervalsWorkoutGenerator:
         elif fase == "DESCARGA":
             directriz_fase = "\n[FASE ESTRATÉGICA: DESCARGA]\nREGLA OBLIGATORIA: Reduce el volumen total de la semana en un 30-40%. Prohibido programar sesiones de VO2Max o umbral sostenido. Prioriza Z1 y Z2.\n"
         elif fase == "TAPER_A":
-            directriz_fase = f"\n[FASE ESTRATÉGICA: TAPER PROFUNDO PARA {tipo_evento}]\nREGLA OBLIGATORIA: Reduce el volumen de resistencia drásticamente (50%), pero MANTÉN LA INTENSIDAD. Debes incluir intervalos cortos a ritmo de carrera con foco absoluto en la disciplina {tipo_evento}. Mantén la tensión neuromuscular sin generar fatiga residual.\n"
+            directriz_fase = f"\n[FASE ESTRATÉGICA: TAPER PROFUNDO PARA {tipo_evento}]\nREGLA OBLIGATORIA: Reduce el volumen de resistencia drásticamente (50%), pero MANTÉN LA INTENSIDAD. Debes incluir intervalos cortos al ritmo de la meta ({meta_evento}) enfocado en {tipo_evento}. Mantén la tensión neuromuscular sin fatiga residual.\n"
         elif fase == "TAPER_B":
-            directriz_fase = f"\n[FASE ESTRATÉGICA: MICRO-TAPER PARA {tipo_evento}]\nREGLA OBLIGATORIA: Mantén el volumen y estructura normal de lunes a miércoles. Solo a partir del jueves reduce drásticamente el volumen y carga de las sesiones previas al evento. Mantén activaciones de intensidad cortas orientadas biomecánicamente a {tipo_evento}.\n"
+            directriz_fase = f"\n[FASE ESTRATÉGICA: MICRO-TAPER PARA {tipo_evento}]\nREGLA OBLIGATORIA: Mantén el volumen y estructura normal de lunes a miércoles. Solo a partir del jueves reduce drásticamente el volumen y carga de las sesiones previas al evento. Mantén activaciones de intensidad cortas orientadas al ritmo de {meta_evento}.\n"
             
         dias_es = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
         dia_str = dias_es[hoy_date.weekday()]

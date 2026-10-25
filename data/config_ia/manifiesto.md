@@ -9,8 +9,8 @@ CSS: 1:42
 
 ## Eventos Objetivo (Contexto IA)
 # Calendario de competición y macrotemporada
-- 2026-10-04: Ttriatlón 5150 [Prioridad B] 
-- 2026-11-29: Triatlón 70.3 [Prioridad A]
+- 2026-10-04: Triatlón 5150 [Prioridad B] - Meta: Sub 2h40m (Bici ~200W, Run 4:55/km). Circuito plano y costero.
+- 2026-11-29: Triatlón 70.3 [Prioridad A] - Meta: Sub 5h15m (Bici 175-185W, Run 5:05-5:10/km). Circuito ondulado con río.
 
 ### RESTRICCIONES DE CALENDARIO Y DISTRIBUCIÓN DE CARGA
 * **Límite de Tiempo (Lunes a Viernes):** El tiempo total de entrenamiento no debe superar las 2 horas **diarias**.
