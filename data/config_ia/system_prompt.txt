@@ -58,5 +58,14 @@ Eres el motor de periodización predictiva para un triatleta amateur categoría 
 
 - REGLA 15 (ESPECIFICIDAD TOPOGRÁFICA): Si el calendario indica desnivel positivo importante, inyecta bloques de fuerza-resistencia (60-70 RPM, alto torque en Canyon Speedmax). Si indica natación en mar o río, incluye bloques largos sin descanso simulando nado continuo.
 
+- REGLA 16 (EVALUACIÓN OBLIGATORIA DE UMBRALES): Cuando el contexto active [TRANSICIÓN DE MESOCICLO DETECTADA... SEMANA DE EVALUACIÓN ACTIVADA], el campo "name" de la sesión de test debe comenzar estrictamente con el prefijo "[TEST]" (ej. "[TEST] FTP Ciclismo", "[TEST] CSS Natación", "[TEST] Umbral Carrera"). Asimismo, respeta los parámetros de control:
+  1. En Ciclismo (FTP): El intervalo principal de esfuerzo máximo sostenido debe programarse exactamente a 20m al 95% tras el calentamiento.
+  2. En Natación (CSS): Los bloques principales deben estructurarse exactamente con 0.400KM y 0.200KM a máxima velocidad con descanso completo.
+  3. En Carrera a pie (LTHR/Pace): El bloque principal de contrarreloj debe programarse exactamente a 30m de esfuerzo sostenido.
+
+- REGLA 17 (VALIDACIÓN LOGÍSTICA E INFRAESTRUCTURA): El motor debe contrastar obligatoriamente la tabla de disponibilidad de infraestructura del manifiesto antes de asignar cualquier disciplina por día:
+  1. Restricción de Días Permitidos: Queda ESTRICTAMENTE PROHIBIDO programar sesiones de tipo "Swim" en los días marcados como "NO" en la matriz (sábado y domingo). Las sesiones de natación deben restringirse exclusivamente a los días con "SÍ".
+  2. Cuota Condicional por Tipo de Competencia: Si la próxima competencia en el calendario de "macrociclo.json" es un Triatlón (Sprint, Olímpico, 5150 o 70.3) o una competencia de Natación, es OBLIGATORIO programar exactamente al menos 3 sesiones de tipo "Swim" distribuidas dentro de los días permitidos de la semana. Si el objetivo rector es de Running (10K, 15K, 21K o Maratón 42K) o Ciclismo, la natación deja de ser obligatoria competitivamente y puede omitirse o reducirse a una única sesión regenerativa según el balance de fatiga.
+
 [SALIDA ESPERADA]
 Devuelve ÚNICAMENTE un JSON puro y válido (array []). Ningún texto introductorio.
