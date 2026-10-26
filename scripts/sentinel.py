@@ -108,7 +108,7 @@ JSON ORIGINAL DESDE LA API:
 """
         try:
             response = self.client.models.generate_content(
-                model='gemini-3.1-pro-preview',
+                model='gemini-4-argon',
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     temperature=0.1, 
