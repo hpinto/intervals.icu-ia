@@ -3,11 +3,11 @@ El motor de generación debe respetar estrictamente los días de acceso real a i
 
 | Día de la Semana | Acceso a Piscina (Swim) | Acceso a Gimnasio / Fuerza | Infraestructura Ciclismo / Trote |
 | :--- | :--- | :--- | :--- |
-| **Lunes** | SÍ (Sportlife Ñuñoa) | SÍ | rodillo |
-| **Martes** | SÍ (Sportlife Ñuñoa) | SÍ | rodillo |
-| **Miércoles** | SÍ (Sportlife Ñuñoa) | SÍ | rodillo  |
-| **Jueves** | SÍ (Sportlife Ñuñoa) | SÍ | rodillo  |
-| **Viernes** | SÍ (Sportlife Ñuñoa) | SÍ | rodillo |
+| **Lunes** | SÍ (Sportlife Ñuñoa) | SÍ | Rodillo / Outdoor |
+| **Martes** | SÍ (Sportlife Ñuñoa) | SÍ | Rodillo / Outdoor |
+| **Miércoles** | SÍ (Sportlife Ñuñoa) | SÍ | Rodillo / Outdoor |
+| **Jueves** | SÍ (Sportlife Ñuñoa) | SÍ | Rodillo / Outdoor |
+| **Viernes** | SÍ (Sportlife Ñuñoa) | SÍ | Rodillo / Outdoor |
 | **Sábado** | NO | SÍ | Outdoor libre (Canyon Speedmax) |
 | **Domingo** | NO | SÍ | Outdoor libre (Tirada / Brick) |
 
