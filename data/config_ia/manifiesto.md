@@ -3,11 +3,11 @@ El motor de generación debe respetar estrictamente los días de acceso real a i
 
 | Día de la Semana | Acceso a Piscina (Swim) | Acceso a Gimnasio / Fuerza | Infraestructura Ciclismo / Trote |
 | :--- | :--- | :--- | :--- |
-| **Lunes** | SÍ (Sportlife Ñuñoa) | SÍ | rodillo |
-| **Martes** | SÍ (Sportlife Ñuñoa) | SÍ | rodillo |
-| **Miércoles** | SÍ (Sportlife Ñuñoa) | SÍ | rodillo  |
-| **Jueves** | SÍ (Sportlife Ñuñoa) | SÍ | rodillo  |
-| **Viernes** | SÍ (Sportlife Ñuñoa) | SÍ | rodillo |
+| **Lunes** | SÍ (Sportlife Ñuñoa) | SÍ | Rodillo / Outdoor |
+| **Martes** | SÍ (Sportlife Ñuñoa) | SÍ | Rodillo / Outdoor |
+| **Miércoles** | SÍ (Sportlife Ñuñoa) | SÍ | Rodillo / Outdoor |
+| **Jueves** | SÍ (Sportlife Ñuñoa) | SÍ | Rodillo / Outdoor |
+| **Viernes** | SÍ (Sportlife Ñuñoa) | SÍ | Rodillo / Outdoor |
 | **Sábado** | NO | SÍ | Outdoor libre (Canyon Speedmax) |
 | **Domingo** | NO | SÍ | Outdoor libre (Tirada / Brick) |
 
@@ -15,4 +15,4 @@ El motor de generación debe respetar estrictamente los días de acceso real a i
 1. **Restricción Absoluta de Natación**: Queda PROHIBIDO programar sesiones de tipo "Swim" en sábado o domingo, dado que no hay disponibilidad ni acceso a piscina en esos días. Las sesiones de natación obligatorias del microciclo deben distribuirse exclusivamente entre Lunes y Viernes.
 2. **Ventanas de Fuerza**: Las sesiones de "WeightTraining" deben programarse preferentemente en los días de acceso a gimnasio.
 3. **Flexibilidad de Bloques de Transición (Brick)**: Los fines de semana (Sábado y Domingo) se reservan exclusivamente para Ciclismo y Trote de larga distancia, adaptándose al objetivo rector del mesociclo activo en `macrociclo.json`.
-4. **Si la siguiente competencia en el calendario es un Triatlón, programar al menos 3 sesiones de natación a la semana.
+4. **Programación Natación**: Si la siguiente competencia en el calendario es un Triatlón o Natación (Swim), programar al menos 3 sesiones de natación a la semana.
