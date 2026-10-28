@@ -29,6 +29,8 @@ class IntervalsWorkoutGenerator:
         
         api_key = os.environ.get("GEMINI_API_KEY")
         self.client = genai.Client(api_key=api_key) if api_key else genai.Client()
+        # Variable centralizada con fallback
+        self.model_version = os.environ.get("GEMINI_MODEL_VERSION", "gemini-4-argon")
 
     def _inferir_mesociclo_dinamico(self, hoy, carreras, mesociclo_previo, forzar_descarga):
         """Infiere el mesociclo por Periodización Inversa y detecta transiciones para programar tests."""
@@ -167,7 +169,6 @@ class IntervalsWorkoutGenerator:
             fase_micro = "DESCARGA"
             semana_a_ejecutar = semanas_carga + 1 
         elif mesociclo_previo != nuevo_meso and nuevo_meso in ["BASE", "BUILD", "PEAK"]:
-            # Si estrenamos mesociclo, reiniciamos el contador del microciclo a Semana 1 (Carga / Test)
             fase_micro = "CARGA"
             semana_a_ejecutar = 1
         elif semana_a_ejecutar > semanas_carga:
@@ -281,11 +282,11 @@ class IntervalsWorkoutGenerator:
         
         prompt_final = f"{system_prompt}{anclaje_temporal}{bloque_calendario}{bloque_mesociclo}{directriz_fase}\n{manifiesto}\n\n[DATOS BIOMÉTRICOS Y DE RENDIMIENTO ACTUALES]\n{contexto_csv}"
         
-        logging.info(f"[Conexión] Solicitando inferencia a Gemini 4 Argon (Prompt de {len(prompt_final)} caracteres)...")
+        logging.info(f"[Conexión] Solicitando inferencia a {self.model_version} (Prompt de {len(prompt_final)} caracteres)...")
         
         try:
             response = self.client.models.generate_content(
-                model='gemini-4-argon',
+                model=self.model_version,
                 contents=prompt_final,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json"

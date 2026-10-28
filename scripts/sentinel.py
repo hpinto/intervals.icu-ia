@@ -19,6 +19,8 @@ class IntervalsSentinel:
         self.client = genai.Client(api_key=self.api_key)
         self.blob_manager = AzureBlobManager()
         self.intervals_client = IntervalsClient() 
+        # Variable centralizada con fallback
+        self.model_version = os.environ.get("GEMINI_MODEL_VERSION", "gemini-4-argon")
 
     def evaluar_fatiga(self):
         contenido_csv = self.blob_manager.leer_texto(BLOB_CSV_PATH)
@@ -93,7 +95,7 @@ class IntervalsSentinel:
 
     def mutar_entrenamiento(self, evento_nube, nivel, motivo):
         nombre_original = evento_nube.get("name", "Entrenamiento")
-        logging.info(f"[Sentinel] Inyectando mutación Nivel {nivel} al evento '{nombre_original}'...")
+        logging.info(f"[Sentinel] Inyectando mutación Nivel {nivel} al evento '{nombre_original}' usando modelo {self.model_version}...")
         
         instruccion_matematica = self.obtener_instruccion_nivel(nivel, motivo)
         prompt = f"""
@@ -108,7 +110,7 @@ JSON ORIGINAL DESDE LA API:
 """
         try:
             response = self.client.models.generate_content(
-                model='gemini-3.1-pro-preview',
+                model=self.model_version,
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     temperature=0.1, 
