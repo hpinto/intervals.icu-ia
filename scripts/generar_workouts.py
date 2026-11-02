@@ -33,7 +33,6 @@ class IntervalsWorkoutGenerator:
         self.model_version = os.environ.get("GEMINI_MODEL_VERSION", "gemini-4-argon")
 
     def _inferir_mesociclo_dinamico(self, hoy, carreras, mesociclo_previo, forzar_descarga):
-        """Infiere el mesociclo por Periodización Inversa y detecta transiciones para programar tests."""
         carreras_validas = []
         for c in carreras:
             try:
@@ -44,7 +43,6 @@ class IntervalsWorkoutGenerator:
 
         carreras_validas.sort(key=lambda x: x[0])
 
-        # 1. DETECTAR FASE DE TRANSICIÓN POST-CARRERA PRIORIDAD A (Últimos 14 días)
         for f_c, c in carreras_validas:
             dias_pasados = (hoy - f_c).days
             if 0 < dias_pasados <= 14 and c.get("prioridad") == "A":
@@ -56,7 +54,6 @@ class IntervalsWorkoutGenerator:
                 )
                 return "TRANSICION", c, Directriz
 
-        # 2. DETECTAR PRÓXIMA CARRERA INMEDIATA (PARA TAPER A O B) Y PRÓXIMA CARRERA PRIORIDAD A (RECTORA DEL MESOCICLO)
         futuras = [(f_c, c) for f_c, c in carreras_validas if f_c >= hoy]
         if not futuras:
             return "BASE", None, "\n[MESOCICLO INFERIDO: BASE GENERAL]\nSin carreras futuras. Mantén desarrollo aeróbico polarizado.\n"
@@ -69,7 +66,6 @@ class IntervalsWorkoutGenerator:
             estado_taper = "TAPER_A" if c_inmediata.get("prioridad") == "A" else "TAPER_B"
             return estado_taper, c_inmediata, ""
 
-        # Buscar la próxima carrera Prioridad A para anclar la Periodización Inversa
         futuras_a = [(f_c, c) for f_c, c in futuras if c.get("prioridad") == "A"]
         f_rectora, c_rectora = futuras_a[0] if futuras_a else futuras[0]
 
@@ -103,7 +99,6 @@ class IntervalsWorkoutGenerator:
 
         bloque_texto = f"\n[MESOCICLO INFERIDO DINÁMICAMENTE: {nuevo_meso} -> {nom_rectora}]\nDIRECTRIZ DEL MESOCICLO: {foco}\n"
 
-        # 3. DETECCIÓN DE TRANSICIÓN DE MESOCICLO PARA DISPARAR SEMANA DE TEST
         if mesociclo_previo and mesociclo_previo != nuevo_meso and nuevo_meso in ["BASE", "BUILD", "PEAK"] and not forzar_descarga:
             es_maraton = "marat" in tipo_rectora.lower() or "42k" in tipo_rectora.lower()
             if es_maraton and nuevo_meso == "PEAK":
@@ -131,7 +126,6 @@ class IntervalsWorkoutGenerator:
         carreras = macro_data.get("calendario_carreras", [])
         mesociclo_previo = macro_data.get("mesociclo_actual")
 
-        # 1. EVALUACIÓN BIO-ADAPTATIVA DE FATIGA (DEFENSIVA)
         forzar_descarga_por_fatiga = False
         try:
             contexto_csv = self.blob_manager.leer_texto(self.csv_file)
@@ -147,7 +141,6 @@ class IntervalsWorkoutGenerator:
         except Exception as e:
             logging.error(f"[Error leyendo CSV para fatiga] No se pudo evaluar el TSB: {e}")
 
-        # 2. INFERENCIA DINÁMICA DE MESOCICLO Y TAPER
         nuevo_meso, carrera_ref, bloque_mesociclo = self._inferir_mesociclo_dinamico(
             hoy, carreras, mesociclo_previo, forzar_descarga_por_fatiga
         )
@@ -156,7 +149,6 @@ class IntervalsWorkoutGenerator:
         tipo_evento = carrera_ref.get("tipo", "General") if carrera_ref else "General"
         meta_evento = carrera_ref.get("meta", "No especificada") if carrera_ref else "No especificada"
 
-        # 3. MÁQUINA DE ESTADOS DEL MICROCICLO (2x1)
         modelo = macro_data.get("modelo", "2x1")
         partes_modelo = modelo.split('x')
         semanas_carga = int(partes_modelo[0])
@@ -209,12 +201,17 @@ class IntervalsWorkoutGenerator:
         
         lock_existente = self.blob_manager.leer_texto(self.lock_file)
         if lock_existente:
-            if hoy_str in lock_existente:
-                logging.warning(f"[Lock] Ya existe un registro de ejecución para hoy ({hoy_str}). Abortando para evitar duplicidad.")
+            # Detectar ejecuciones terminadas o en curso
+            if hoy_str in lock_existente or "progreso" in lock_existente.lower():
+                logging.warning(f"[Lock] Ya existe un registro de ejecución o un proceso activo para hoy ({hoy_str}). Abortando preventivamente.")
                 return
             else:
                 logging.info("[Lock] Purgando candado fosilizado de días anteriores...")
                 self.blob_manager.eliminar_archivo(self.lock_file)
+                
+        # BLOQUEO OPTIMISTA: Declarar intención antes de gastar recursos de red
+        self.blob_manager.guardar_texto(self.lock_file, f"Pipeline en progreso para el {hoy_str}")
+        logging.info(f"[Lock] Candado preventivo de ejecución inyectado en Azure.")
 
         macro_str = self.blob_manager.leer_texto(self.macro_file)
         if not macro_str:
@@ -235,7 +232,6 @@ class IntervalsWorkoutGenerator:
             logging.error(f"[Error Crítico] No se encontró {self.csv_file}. Abortando.")
             return
         
-        # Inyección dinámica del calendario de carreras
         carreras = nuevo_macro_data.get("calendario_carreras", [])
         bloque_calendario = "\n[CALENDARIO DE COMPETENCIAS, METAS Y TOPOGRAFÍA]\n"
         if carreras:
