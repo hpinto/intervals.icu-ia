@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import datetime
+import requests
 
 # FORZAR INYECCIÓN DE ENTORNO LOCAL ANTES DE IMPORTAR UTILIDADES
 if os.path.exists("local.settings.json"):
@@ -120,12 +121,14 @@ class IntervalsUploader:
                 if "T" not in payload.get("start_date_local", ""):
                     payload["start_date_local"] = f"{fecha}T07:00:00"
 
-                if "workout_doc" in payload and payload["workout_doc"]:
-                    doc = payload["workout_doc"]
-                    if not payload.get("description"):
-                        payload["description"] = doc
-                elif payload.get("description") and "workout_doc" not in payload:
-                    payload["workout_doc"] = payload["description"]
+                # Corrección estricta: Extraer y ELIMINAR workout_doc del payload
+                if "workout_doc" in payload:
+                    doc = payload.pop("workout_doc")
+                    if doc:
+                        if payload.get("description"):
+                            payload["description"] = payload["description"] + "\n\n" + doc
+                        else:
+                            payload["description"] = doc
                 
                 self.client.upload_event(payload)
                 logging.info(f"[Éxito] JSON inyectado en Intervals.icu: {deporte} ({nombre_entreno}) para el {fecha}.")
@@ -138,6 +141,9 @@ class IntervalsUploader:
                 
             except json.JSONDecodeError:
                 logging.error(f"[Error] El archivo {blob_name} está corrupto y no es un JSON válido.")
+            except requests.exceptions.HTTPError as e:
+                logging.error(f"[Error de Red] Fallo al subir {blob_name}: HTTP {e.response.status_code}")
+                logging.error(f"[Diagnóstico Intervals] Razón del rechazo: {e.response.text}")
             except Exception as e:
                 logging.error(f"[Error de Red] Fallo al subir {blob_name}: {e}")
 
