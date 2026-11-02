@@ -32,6 +32,15 @@
             "dias_taper": 21,
             "meta": "Sub 4h00m (Pace promedio sostenido: 5:35-5:40/km)",
             "descripcion": "42K de carrera a pie urbana sobre asfalto, con falso plano en primera mitad y descenso en segunda mitad."
-        }
+        },
+        {
+            "nombre": "Ironman 5150 Coquimbo",
+            "fecha": "2027-10-03",
+            "tipo": "Triatl\u00f3n 5150",
+            "prioridad": "B",
+            "dias_taper": 5,
+            "meta": "Sub 3h (Ritmo carrera: Bici 30 km/h, Run 5:15/km)",
+            "descripcion": "1500mts nataci\u00f3n en mar, 40km ciclismo con 400mts de desnivel positivo, 10km trote plano."
+        }	
     ]
 }
