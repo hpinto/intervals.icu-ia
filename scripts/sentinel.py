@@ -19,7 +19,6 @@ class IntervalsSentinel:
         self.client = genai.Client(api_key=self.api_key)
         self.blob_manager = AzureBlobManager()
         self.intervals_client = IntervalsClient() 
-        # Variable centralizada con fallback
         self.model_version = os.environ.get("GEMINI_MODEL_VERSION", "gemini-4-argon")
 
     def evaluar_fatiga(self):
@@ -28,7 +27,6 @@ class IntervalsSentinel:
             logging.warning(f"[Sentinel] CSV de contexto no encontrado en Azure ({BLOB_CSV_PATH}).")
             return 0, "No hay contexto."
 
-        # Limpiar el formato híbrido del nuevo contexto para extraer solo la tabla CSV de biometría
         lineas = contenido_csv.split('\n')
         lineas_csv = []
         leer_csv = False
@@ -38,7 +36,6 @@ class IntervalsSentinel:
                 leer_csv = True
             elif linea.startswith("[HISTORIAL"):
                 break
-                
             if leer_csv and linea.strip():
                 lineas_csv.append(linea)
 
@@ -55,8 +52,10 @@ class IntervalsSentinel:
         ultima_fila = filas[-1]
         try:
             hrv_anoche = float(ultima_fila.get("HRV", 0))
+            sleep_score = float(ultima_fila.get("Sleep_Score", 100))
         except ValueError:
             hrv_anoche = 0
+            sleep_score = 100
 
         hrv_historico = []
         for row in filas[-8:-1]:
@@ -74,17 +73,23 @@ class IntervalsSentinel:
 
         caida_porcentaje = ((hrv_7d - hrv_anoche) / hrv_7d) * 100
 
-        if caida_porcentaje >= 20:
-            return 3, f"Fatiga Severa: Caída HRV del {caida_porcentaje:.1f}% (>20%)."
-        elif 15 <= caida_porcentaje < 20:
-            return 2, f"Fatiga Moderada: Caída HRV del {caida_porcentaje:.1f}% (15-20%)."
-        elif 10 <= caida_porcentaje < 15:
-            return 1, f"Fatiga Leve: Caída HRV del {caida_porcentaje:.1f}% (10-15%)."
+        # EVALUACIÓN COMPUESTA (Recalibrada para Master 50+)
+        if caida_porcentaje >= 25 or sleep_score < 50:
+            return 3, f"Fatiga Severa: Caída HRV del {caida_porcentaje:.1f}% o Sueño Crítico (Score: {sleep_score})."
+        elif 18 <= caida_porcentaje < 25:
+            return 2, f"Fatiga Moderada: Caída HRV del {caida_porcentaje:.1f}% (18-25%)."
+        elif 12 <= caida_porcentaje < 18:
+            return 1, f"Fatiga Leve: Caída HRV del {caida_porcentaje:.1f}% (12-18%)."
         
         return 0, f"Recuperación óptima. Variación HRV: {caida_porcentaje:.1f}%."
 
-    def obtener_instruccion_nivel(self, nivel, motivo):
+    def obtener_instruccion_nivel(self, nivel, motivo, deporte):
         base = f"El atleta presenta {motivo}. REGLAS ESTRICTAS DE MUTACIÓN PARA EL JSON:\n"
+        
+        # BLINDAJE PARA FUERZA
+        if deporte == "WeightTraining":
+            base += "REGLA DE SINTAXIS PARA FUERZA: MANTÉN INTACTO el operador '@' y los tiempos en cada ejercicio (ej. '60s @ Z1 hr Pull-Up 10 reps'). NO rompas la estructura dual.\n"
+
         if nivel == 1:
             return base + "- NIVEL 1: PROTECCIÓN DE INTENSIDAD. PROHIBIDO modificar los valores de Pace o Power. RECORTA el tiempo/distancia de los intervalos de trabajo principales en un 25%. Mantén el calentamiento y enfriamiento intactos."
         elif nivel == 2:
@@ -95,14 +100,15 @@ class IntervalsSentinel:
 
     def mutar_entrenamiento(self, evento_nube, nivel, motivo):
         nombre_original = evento_nube.get("name", "Entrenamiento")
+        deporte = evento_nube.get("type", "Unknown")
         logging.info(f"[Sentinel] Inyectando mutación Nivel {nivel} al evento '{nombre_original}' usando modelo {self.model_version}...")
         
-        instruccion_matematica = self.obtener_instruccion_nivel(nivel, motivo)
+        instruccion_matematica = self.obtener_instruccion_nivel(nivel, motivo, deporte)
         prompt = f"""
 Eres un motor de periodización deportiva estricto. Debes ajustar este entrenamiento extraído de la API de Intervals.icu respetando el DSL de la plataforma.
 {instruccion_matematica}
 - Agrega obligatoriamente la etiqueta [AJUSTADO TIER {nivel}] al inicio del campo "name".
-- MANTÉN INTACTOS los campos "id" y "start_date_local".
+- MANTÉN INTACTOS los campos "id", "start_date_local" y "type".
 - Devuelve ÚNICAMENTE el JSON validado como un diccionario plano ({{}}), sin arrays ni markdown envolvente.
 
 JSON ORIGINAL DESDE LA API:
