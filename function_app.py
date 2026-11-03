@@ -15,7 +15,7 @@ app = func.FunctionApp()
 def timer_orquestador_inteligente(mytimer: func.TimerRequest) -> None:
     hoy_dt = datetime.date.today()
     hoy = hoy_dt.isoformat()
-    # Candado estático único
+    # Candado estático único para evitar doble ejecución en el mismo día
     lock_blob = "workouts_ia/pipeline_estado.lock"
     blob_manager = AzureBlobManager()
 
@@ -48,25 +48,33 @@ def timer_orquestador_inteligente(mytimer: func.TimerRequest) -> None:
         logging.info("[Orquestador] Registro creado, pero HRV o Sleep están vacíos. Esperando...")
         return
 
-    logging.info(f"[Orquestador] Biometría detectada (HRV: {hrv}, Sleep: {sleep}). Iniciando ignición...")
+    logging.info(f"[Orquestador] Biometría detectada (HRV: {hrv}, Sleep: {sleep}). Evaluando enrutamiento por día...")
 
-    # 4. Disparar Reacción en Cadena
+    # 4. Enrutamiento Condicional de Lógica de Negocio
+    es_domingo = (hoy_dt.weekday() == 6)
+
     try:
-        logging.info("---> Ejecutando 1/4: Contexto IA")
+        # Siempre se actualiza la biometría diaria para el Sentinel
+        logging.info("---> Ejecutando Contexto IA (Actualización diaria de biometría)")
         IntervalsContextGenerator().generar_csv()
         
-        logging.info("---> Ejecutando 2/4: Inferencia Gemini")
-        IntervalsWorkoutGenerator().generar_entrenamientos()
-        
-        logging.info("---> Ejecutando 3/4: Mutación Sentinel")
+        if es_domingo:
+            logging.info("[PLANIFICACIÓN MACRO] Domingo detectado. Generando semana completa...")
+            logging.info("---> Ejecutando Inferencia Gemini")
+            IntervalsWorkoutGenerator().generar_entrenamientos()
+            
+            logging.info("---> Ejecutando Push a Intervals.icu")
+            IntervalsUploader().sincronizar()
+        else:
+            logging.info("[MICRO-GESTIÓN] Día regular detectado. Omitiendo generación semanal.")
+
+        # Siempre se ejecuta Sentinel para aplicar mutaciones por fatiga al entrenamiento de hoy
+        logging.info("---> Ejecutando Mutación Sentinel (Ajuste de fatiga diario)")
         IntervalsSentinel().ejecutar()
-        
-        logging.info("---> Ejecutando 4/4: Push a Intervals.icu")
-        IntervalsUploader().sincronizar()
         
         # 5. Sellar el sistema sobrescribiendo el candado único
         blob_manager.guardar_texto(lock_blob, hoy)
-        logging.info("[Orquestador] Operación de día cero finalizada. Candado estático actualizado en la nube.")
+        logging.info("[Orquestador] Operación diaria finalizada. Candado estático actualizado en la nube.")
 
     except Exception as e:
         logging.error(f"[Error Crítico] Colapso en la cadena de ejecución: {e}")
