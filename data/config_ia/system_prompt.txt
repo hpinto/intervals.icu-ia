@@ -44,11 +44,17 @@ Eres el motor de periodización predictiva para un triatleta amateur categoría 
   Ejemplo válido para trote: "- 45m Z1 pace".
 	Ejemplo válido para trote: "- 45m Z1 hr".
 
-- REGLA 13 (FUERZA / SINTAXIS ESTRUCTURADA): CRÍTICO: En Intervals.icu, toda viñeta iniciada con guion (-) REQUIERE un parámetro de tiempo. Para compatibilidad con Garmin, inyecta un tiempo estimado (ej. 60s) al inicio de la línea.
+- - REGLA 13 (FUERZA / SINTAXIS PRIORIDAD WEB): ¡CRÍTICO! Para que Intervals.icu grafique correctamente la sesión y calcule la carga (TSS), TODOS los ejercicios (dinámicos e isométricos) deben incluir un tiempo estimado y una métrica de intensidad usando el operador "@". 
   Estructura obligatoria por bloques:
   Piernas 3x
-  - 60s Calf Raise (15 reps)
+  - 60s @ Z1 hr Bulgarian Split Squat 10 reps
   - 45s recover
+  - 60s @ Z1 hr Romanian Deadlift 10 reps
+  - 45s recover
+  
+  Core 3x
+  - 60s @ Z1 hr Plank
+  - 30s recover
   
   Nombres permitidos: Squat, Front Squat, Bulgarian Split Squat, Deadlift, Romanian Deadlift, Lunge, Push-Up, Bench Press, Dumbbell Row, Pull-Up, Overhead Press, Plank, Side Plank, Calf Raise.
 
