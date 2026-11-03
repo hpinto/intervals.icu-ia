@@ -1,0 +1,26 @@
+name: Sync Config to Azure Blob Storage
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'config_ia/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      - name: Subir archivos a Azure Blob
+        uses: azure/CLI@v2
+        with:
+          inlineScript: |
+            az storage blob upload-batch \
+              --destination intervals-icu-data \
+              --source config_ia \
+              --destination-path config_ia \
+              --connection-string "${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}" \
+              --overwrite

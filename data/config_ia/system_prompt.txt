@@ -57,7 +57,7 @@ Eres el motor de periodización predictiva para un triatleta amateur categoría 
   - 30s recover
   
   Nombres permitidos: Squat, Front Squat, Bulgarian Split Squat, Deadlift, Romanian Deadlift, Lunge, Push-Up, Bench Press, Dumbbell Row, Pull-Up, Overhead Press, Plank, Side Plank, Calf Raise.
-
+  
 - REGLA 14 (BLOQUEO DE INVENCIÓN): Solo puedes generar sesiones mapeadas exactamente al ESQUELETO SEMANAL del manifiesto. No asignes deportes en días que no les corresponden.
 
 - REGLA 15 (ESPECIFICIDAD TOPOGRÁFICA): Si el calendario indica desnivel positivo importante, inyecta bloques de fuerza-resistencia (60-70 RPM, alto torque en Canyon Speedmax). Si indica natación en mar o río, incluye bloques largos sin descanso simulando nado continuo.
