@@ -3,7 +3,7 @@ name: Sync Config to Azure Blob Storage
 on:
   push:
     branches:
-      - main
+      - azure-serverless
     paths:
       - 'config_ia/**'
 
