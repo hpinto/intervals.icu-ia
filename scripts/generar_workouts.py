@@ -250,7 +250,9 @@ class IntervalsWorkoutGenerator:
         if fase == "CARGA":
             directriz_fase = "\n[FASE DEL MICROCICLO: CARGA]\nAplica sobrecarga progresiva respetando las métricas de fatiga y el foco del mesociclo inferido. Aumenta volumen o intensidad respecto al bloque anterior.\n"
         elif fase == "DESCARGA":
-            directriz_fase = "\n[FASE DEL MICROCICLO: DESCARGA]\nREGLA OBLIGATORIA: Reduce el volumen total de la semana en un 30-40%. Prohibido programar sesiones de VO2Max o umbral sostenido. Prioriza Z1 y Z2.\n"
+            bloque_calendario = "\n[CALENDARIO ENMASCARADO POR SEGURIDAD]\nEl calendario futuro se oculta para forzar concentración absoluta en la disipación de fatiga actual.\n"
+            bloque_mesociclo = "\n[MESOCICLO ENMASCARADO: RECUPERACIÓN ABSOLUTA]\nDIRECTRIZ DEL MESOCICLO: Anula cualquier prioridad competitiva. Regeneración tisular y nerviosa estricta.\n"
+            directriz_fase = "\n[FASE: DESCARGA ESTRICTA]\nREGLA MATEMÁTICA INNEGOCIABLE: El volumen TOTAL de la semana será MÁXIMO 7 horas. Sesiones de ciclismo truncadas a 1h30m. Trote truncado a 45m. INTENSIDAD BLOQUEADA: 100% en Z1 y Z2. PROHIBIDO generar intervalos en Z3, Z4 o Z5.\n"
         elif fase == "TRANSICION":
             directriz_fase = "\n[FASE DEL MICROCICLO: TRANSICIÓN POST-CARRERA]\nREGLA OBLIGATORIA: Semana de recuperación profunda post-competencia. Prohibido cualquier bloque en Z3, Z4 o Z5.\n"
         elif fase == "TAPER_A":
