@@ -28,17 +28,8 @@ class IntervalsSentinel:
             return 0, "No hay contexto."
 
         lineas = contenido_csv.split('\n')
-        lineas_csv = []
-        leer_csv = False
+        lineas_csv = [l for l in lineas if l.strip() and not l.startswith("[HISTORIAL")]
         
-        for linea in lineas:
-            if linea.startswith("Fecha,CTL"):
-                leer_csv = True
-            elif linea.startswith("[HISTORIAL"):
-                break
-            if leer_csv and linea.strip():
-                lineas_csv.append(linea)
-
         if not lineas_csv:
             return 0, "CSV vacío o formato de contexto irreconocible."
 
@@ -53,9 +44,12 @@ class IntervalsSentinel:
         try:
             hrv_anoche = float(ultima_fila.get("HRV", 0))
             sleep_score = float(ultima_fila.get("Sleep_Score", 100))
+            # CORTAFUEGOS: Extraer Form (TSB) desde las cabeceras estándar de Intervals.icu
+            tsb_actual = float(ultima_fila.get("Form", ultima_fila.get("TSB", 0)))
         except ValueError:
             hrv_anoche = 0
             sleep_score = 100
+            tsb_actual = 0
 
         hrv_historico = []
         for row in filas[-8:-1]:
@@ -73,8 +67,11 @@ class IntervalsSentinel:
 
         caida_porcentaje = ((hrv_7d - hrv_anoche) / hrv_7d) * 100
 
-        # EVALUACIÓN COMPUESTA (Recalibrada para Master 50+)
-        if caida_porcentaje >= 25 or sleep_score < 50:
+        # CORTAFUEGOS DETERMINISTA POR TSB
+        if tsb_actual <= -25:
+            return 3, f"Freno de Emergencia: TSB Crítico ({tsb_actual}). Riesgo inminente de lesión."
+        # EVALUACIÓN COMPUESTA ORIGINAL
+        elif caida_porcentaje >= 25 or sleep_score < 50:
             return 3, f"Fatiga Severa: Caída HRV del {caida_porcentaje:.1f}% o Sueño Crítico (Score: {sleep_score})."
         elif 18 <= caida_porcentaje < 25:
             return 2, f"Fatiga Moderada: Caída HRV del {caida_porcentaje:.1f}% (18-25%)."
