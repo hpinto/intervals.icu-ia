@@ -28,9 +28,21 @@ class IntervalsSentinel:
             return 0, "No hay contexto."
 
         lineas = contenido_csv.split('\n')
-        lineas_csv = [l for l in lineas if l.strip() and not l.startswith("[HISTORIAL")]
+        lineas_csv = []
+        leer_csv = False
         
-        if not lineas_csv:
+        # EXTRACCIÓN AISLADA CORREGIDA
+        for linea in lineas:
+            if linea.startswith("Fecha,CTL"):
+                leer_csv = True
+                lineas_csv.append(linea) # Inyectar la cabecera real
+            elif linea.startswith("[") and leer_csv:
+                # Si topamos con el siguiente bloque (ej. [POLARIZACION]), cortamos la lectura
+                break
+            elif leer_csv and linea.strip():
+                lineas_csv.append(linea)
+
+        if not lineas_csv or len(lineas_csv) < 2:
             return 0, "CSV vacío o formato de contexto irreconocible."
 
         f = io.StringIO('\n'.join(lineas_csv))
@@ -38,13 +50,13 @@ class IntervalsSentinel:
         filas = list(reader)
 
         if not filas:
-            return 0, "CSV vacío."
+            return 0, "CSV sin datos históricos."
 
         ultima_fila = filas[-1]
         try:
             hrv_anoche = float(ultima_fila.get("HRV", 0))
             sleep_score = float(ultima_fila.get("Sleep_Score", 100))
-            # CORTAFUEGOS: Extraer Form (TSB) desde las cabeceras estándar de Intervals.icu
+            # CORTAFUEGOS: Extracción segura del TSB
             tsb_actual = float(ultima_fila.get("Form", ultima_fila.get("TSB", 0)))
         except ValueError:
             hrv_anoche = 0

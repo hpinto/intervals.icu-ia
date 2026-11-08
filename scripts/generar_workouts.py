@@ -264,18 +264,21 @@ class IntervalsWorkoutGenerator:
         dia_str = dias_es[hoy_date.weekday()]
         
         if hoy_date.weekday() == 6:
-            dias_para_domingo = 7
+            # Ejecución automatizada dominical: planificar próxima semana (Lunes a Domingo)
+            fecha_inicio = hoy_date + datetime.timedelta(days=1)
+            fecha_fin = fecha_inicio + datetime.timedelta(days=6)
+            texto_rango = f"desde mañana Lunes {fecha_inicio.isoformat()} hasta el domingo {fecha_fin.isoformat()}"
         else:
-            dias_para_domingo = 6 - hoy_date.weekday()
-            
-        domingo_date = hoy_date + datetime.timedelta(days=dias_para_domingo)
-        domingo_str = domingo_date.isoformat()
+            # Ejecución de bypass manual (mitad de semana)
+            fecha_inicio = hoy_date
+            fecha_fin = hoy_date + datetime.timedelta(days=6 - hoy_date.weekday())
+            texto_rango = f"desde hoy {dia_str} {hoy_str} hasta el domingo {fecha_fin.isoformat()}"
 
         anclaje_temporal = (
             f"\n[RELOJ DEL SISTEMA]\n"
             f"CRÍTICO: Hoy es {dia_str}, {hoy_str}. "
-            f"Genera los entrenamientos estrictamente para los días restantes de esta semana (desde hoy {hoy_str} hasta el domingo {domingo_str}). "
-            f"Asegura que los entrenamientos de mayor volumen y tiradas largas se programen orgánicamente para el fin de semana (sábado y domingo).\n"
+            f"Genera la matriz de entrenamientos ESTRICTAMENTE {texto_rango}. "
+            f"PROHIBIDO generar sesiones para el día de hoy o fechas anteriores a {fecha_inicio.isoformat()}.\n"
         )
         
         prompt_final = f"{system_prompt}{anclaje_temporal}{bloque_calendario}{bloque_mesociclo}{directriz_fase}\n{manifiesto}\n\n[DATOS BIOMÉTRICOS Y DE RENDIMIENTO ACTUALES]\n{contexto_csv}"
