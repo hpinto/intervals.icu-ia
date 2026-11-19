@@ -29,8 +29,9 @@ class IntervalsWorkoutGenerator:
         
         api_key = os.environ.get("GEMINI_API_KEY")
         self.client = genai.Client(api_key=api_key) if api_key else genai.Client()
-        # Variable centralizada con fallback
-        self.model_version = os.environ.get("GEMINI_MODEL_VERSION", "gemini-4-argon")
+        # Variables centralizadas con fallback
+        self.model_version = os.environ.get("GEMINI_MODEL_VERSION", "gemini-4-neon")
+        self.thinking_level = os.environ.get("GEMINI_THINKING_LEVEL_GENERATOR", "high")
 
     def _inferir_mesociclo_dinamico(self, hoy, carreras, mesociclo_previo, forzar_descarga):
         carreras_validas = []
@@ -283,14 +284,15 @@ class IntervalsWorkoutGenerator:
         
         prompt_final = f"{system_prompt}{anclaje_temporal}{bloque_calendario}{bloque_mesociclo}{directriz_fase}\n{manifiesto}\n\n[DATOS BIOMÉTRICOS Y DE RENDIMIENTO ACTUALES]\n{contexto_csv}"
         
-        logging.info(f"[Conexión] Solicitando inferencia a {self.model_version} (Prompt de {len(prompt_final)} caracteres)...")
+        logging.info(f"[Conexión] Solicitando inferencia a {self.model_version} (Thinking: {self.thinking_level} | Prompt de {len(prompt_final)} caracteres)...")
         
         try:
             response = self.client.models.generate_content(
                 model=self.model_version,
                 contents=prompt_final,
                 config=types.GenerateContentConfig(
-                    response_mime_type="application/json"
+                    response_mime_type="application/json",
+                    thinking_config=types.ThinkingConfig(thinking_level=self.thinking_level)
                 )
             )
             
