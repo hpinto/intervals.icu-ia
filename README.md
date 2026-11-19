@@ -1,3 +1,5 @@
+[![Amazon Kindle](https://img.shields.io/badge/Amazon_Kindle-Manual_Técnico_SENTINEL-FF9900?style=for-the-badge&logo=amazon&logoColor=white)](https://www.amazon.com/dp/B0H58R3TW3)
+
 ## 📖 Documentación y Arquitectura Oficial
 
 Este repositorio contiene el código fuente abierto del ecosistema **SENTINEL** (orquestación de entrenamiento de resistencia con IA, telemetría de Garmin/Intervals.icu y Azure Functions).
